@@ -14,24 +14,47 @@ export default function Home() {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [markers, setMarkers] = useState({});
   const [isLoading, setIsLoading] = useState(true);
-  const [mapSize, setMapSize] = useState({ width: 3121, height: 3121 });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [mapStyle, setMapStyle] = useState("normal-locations");
+  const [nameDisplay, setNameDisplay] = useState("hover");
+
+  const MAP_STYLES = {
+    normal: "https://map.col-erlc.ca/normal.png",
+    "normal-locations": "https://map.col-erlc.ca/normal-locations.png",
+    winter: "https://map.col-erlc.ca/winter.png",
+    "winter-locations": "https://map.col-erlc.ca/winter-locations.png"
+  };
 
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
-  const lastOffset = useRef({ x: 0, y: 0 });
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   const [transform, setTransform] = useState({
-    scale: 1,
+    scale: 0.3,
     x: 0,
     y: 0
   });
 
-  const MAP_SIZE = 3121; // Game world size
-  const MAP_IMAGE_SIZE = 3121; // Image pixel size
+  const MAP_SIZE = 3121;
+  const MAP_IMAGE_SIZE = 3121;
 
-  // Fetch data
+  const centerMap = useCallback(() => {
+    if (!containerRef.current || !mapRef.current) return;
+    const container = containerRef.current.getBoundingClientRect();
+    setTransform({
+      scale: 0.3,
+      x: (container.width - MAP_IMAGE_SIZE * 0.3) / 2,
+      y: (container.height - MAP_IMAGE_SIZE * 0.3) / 2
+    });
+  }, []);
+
+  useEffect(() => {
+    if (mapRef.current?.complete) centerMap();
+  }, [mapStyle, centerMap]);
+
   const fetchData = async () => {
     try {
       setIsLoading(true);
@@ -67,7 +90,6 @@ export default function Home() {
       setModCalls(modCallsRes);
       setVehicles(vehiclesRes);
 
-      // Calculate markers
       const newMarkers = {};
       Object.entries(playersRes).forEach(([team, members]) => {
         members.forEach((p) => {
@@ -76,13 +98,7 @@ export default function Home() {
               p.Location.LocationX,
               p.Location.LocationZ
             );
-            newMarkers[p.Player] = {
-              x,
-              y,
-              player: p,
-              team,
-              id: p.Player
-            };
+            newMarkers[p.Player] = { x, y, player: p, team, id: p.Player };
           }
         });
       });
@@ -100,56 +116,31 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Center map on initial load
-  useEffect(() => {
-    if (containerRef.current && mapRef.current) {
-      centerMap();
-    }
-  }, [mapRef.current]);
+  const worldToMap = (x, z) => ({
+    x: (x / MAP_SIZE) * MAP_IMAGE_SIZE,
+    y: (z / MAP_SIZE) * MAP_IMAGE_SIZE
+  });
 
-  // Convert world coords to map coords
-  const worldToMap = (x, z) => {
-    // Game world: (0,0) to (3000,3000) where 0,0 is bottom left
-    // Map image: (0,0) to (3121,3121) where 0,0 is top left
-    return {
-      x: (x / MAP_SIZE) * MAP_IMAGE_SIZE,
-      y: (z / MAP_SIZE) * MAP_IMAGE_SIZE // Flip Y
-    };
-  };
-
-  const centerMap = () => {
-    if (!containerRef.current || !mapRef.current) return;
-
-    const container = containerRef.current.getBoundingClientRect();
-    const mapWidth = MAP_IMAGE_SIZE;
-    const mapHeight = MAP_IMAGE_SIZE;
-
-    setTransform({
-      scale: 0.3,
-      x: (container.width - mapWidth) / 2,
-      y: (container.height - mapHeight) / 2
-    });
-  };
-
-  // Map drag handlers
+  // Google Maps style dragging
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     isDragging.current = true;
-    dragStart.current = {
-      x: e.clientX - transform.x,
-      y: e.clientY - transform.y
-    };
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    dragOffset.current = { x: transform.x, y: transform.y };
   };
 
   const handleMouseMove = (e) => {
     if (!isDragging.current) return;
     e.preventDefault();
 
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+
     setTransform((prev) => ({
       ...prev,
-      x: e.clientX - dragStart.current.x,
-      y: e.clientY - dragStart.current.y
+      x: dragOffset.current.x + dx,
+      y: dragOffset.current.y + dy
     }));
   };
 
@@ -157,6 +148,7 @@ export default function Home() {
     isDragging.current = false;
   };
 
+  // Google Maps style zooming (towards mouse position)
   const handleWheel = (e) => {
     e.preventDefault();
 
@@ -164,15 +156,15 @@ export default function Home() {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Calculate mouse position relative to map
+    // Calculate mouse position relative to map before zoom
     const mapX = (mouseX - transform.x) / transform.scale;
     const mapY = (mouseY - transform.y) / transform.scale;
 
-    // Calculate new scale
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.min(Math.max(0.3, transform.scale * delta), 3);
+    // Calculate new scale (Google Maps style - smoother)
+    const delta = e.deltaY > 0 ? 0.95 : 1.05;
+    const newScale = Math.min(Math.max(0.1, transform.scale * delta), 3);
 
-    // Adjust offset to zoom towards mouse
+    // Adjust position to zoom towards mouse (Google Maps style)
     setTransform({
       scale: newScale,
       x: mouseX - mapX * newScale,
@@ -180,33 +172,48 @@ export default function Home() {
     });
   };
 
+  // Touch support for mobile (Google Maps style)
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      isDragging.current = true;
+      dragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      dragOffset.current = { x: transform.x, y: transform.y };
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging.current || e.touches.length !== 1) return;
+    e.preventDefault();
+
+    const dx = e.touches[0].clientX - dragStart.current.x;
+    const dy = e.touches[0].clientY - dragStart.current.y;
+
+    setTransform((prev) => ({
+      ...prev,
+      x: dragOffset.current.x + dx,
+      y: dragOffset.current.y + dy
+    }));
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+  };
+
   const getTeamColor = (team) => {
     switch (team?.toLowerCase()) {
       case "police":
         return "bg-blue-500";
       case "sheriff":
-        return "bg-green-900";
+        return "bg-green-600";
       case "fire":
         return "bg-red-600";
       case "dot":
         return "bg-orange-500";
+      case "jail":
+        return "bg-purple-600";
       default:
         return "bg-gray-500";
-    }
-  };
-
-  const getTeamBadgeColor = (team) => {
-    switch (team?.toLowerCase()) {
-      case "police":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
-      case "sheriff":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
-      case "fire":
-        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
-      case "dot":
-        return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
-      default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
     }
   };
 
@@ -214,11 +221,9 @@ export default function Home() {
     (playerKey) => {
       const marker = markers[playerKey];
       if (!marker || !containerRef.current) return;
-
       const container = containerRef.current.getBoundingClientRect();
-
       setTransform({
-        scale: 2, // Zoom in a bit when focusing
+        scale: 2,
         x: container.width / 2 - marker.x * 2,
         y: container.height / 2 - marker.y * 2
       });
@@ -235,451 +240,169 @@ export default function Home() {
     }
   };
 
-  const resetView = () => {
-    centerMap();
-  };
+  const resetView = () => centerMap();
 
-  // --- Render ---
   return (
     <div className="flex h-screen overflow-hidden bg-gray-900 text-white">
-      {/* Sidebar */}
-      <div className="w-96 b backdrop-blur-xl p-5 overflow-y-auto space-y-4 shadow-2xl scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
-        {/* Header with glass morphism */}
-        <div className="flex items-center justify-between mb-8 relative">
-          <div className="relative flex items-center gap-3">
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      <div
+        className={`fixed top-0 left-0 h-full w-80 z-50 transform transition-transform duration-300 ease-in-out md:hidden overflow-y-auto ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="absolute inset-0 bg-gray-900/90 backdrop-blur-md" />
+        <div className="relative p-4">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white">Menu</h2>
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 backdrop-blur-sm border border-white/10"
+            >
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div className="space-y-4">
+            <SidebarContent
+              serverInfo={serverInfo}
+              players={players}
+              staff={staff}
+              joinLogs={joinLogs}
+              queue={queue}
+              killLogs={killLogs}
+              commandLogs={commandLogs}
+              modCalls={modCalls}
+              vehicles={vehicles}
+              selectedPlayer={selectedPlayer}
+              togglePlayerPopup={togglePlayerPopup}
+              getTeamColor={getTeamColor}
+              nameDisplay={nameDisplay}
+              setSelectedPlayer={setSelectedPlayer}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="hidden md:block fixed top-4 left-4 w-96 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl">
+        <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
+        <div className="relative p-5">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight">
-                <span className="bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
-                  City{" "}
-                </span>
-                <span className="bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
-                  Of{" "}
-                </span>
-                <span className="bg-gradient-to-r from-gray-400 to-gray-300 bg-clip-text text-transparent">
-                  London
-                </span>
-              </h1>
+              <h1 className="text-2xl font-bold text-white">City Of London</h1>
               <p className="text-xs text-gray-400">Live Map</p>
             </div>
-          </div>
-          {isLoading && (
-            <div className="relative">
-              <div className="absolute inset-0 bg-blue-500 rounded-full blur-md opacity-50 animate-pulse"></div>
-              <div className="relative w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+            <div className="flex items-center gap-2">
+              {isLoading && (
+                <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              )}
             </div>
-          )}
+          </div>
+          <SidebarContent
+            serverInfo={serverInfo}
+            players={players}
+            staff={staff}
+            joinLogs={joinLogs}
+            queue={queue}
+            killLogs={killLogs}
+            commandLogs={commandLogs}
+            modCalls={modCalls}
+            vehicles={vehicles}
+            selectedPlayer={selectedPlayer}
+            togglePlayerPopup={togglePlayerPopup}
+            getTeamColor={getTeamColor}
+            nameDisplay={nameDisplay}
+            setSelectedPlayer={setSelectedPlayer}
+          />
         </div>
-
-        <Dropdown title="Server Status" icon="🖥️" accentColor="green">
-          <div className="relative bg-gray-800/90 rounded-xl p-5 mt-4 border border-white/10 shadow-lg backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                SERVER STATUS
-              </h2>
-              <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium border border-green-500/30">
-                ONLINE
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {/* Server Name */}
-              <div className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-white/5">
-                <span className="text-gray-400 flex items-center gap-2 text-sm">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                  Server Name
-                </span>
-                <span className="font-medium text-white text-sm truncate max-w-[180px]">
-                  {serverInfo?.Name}
-                </span>
-              </div>
-
-              {/* Players */}
-              <div className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-white/5">
-                <span className="text-gray-400 flex items-center gap-2 text-sm">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                    />
-                  </svg>
-                  Players
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-white text-sm">
-                    {serverInfo?.CurrentPlayers}/{serverInfo?.MaxPlayers}
-                  </span>
-                  <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers >
-                        0.8
-                          ? "bg-red-500"
-                          : "bg-green-500"
-                      }`}
-                      style={{
-                        width: `${((serverInfo?.CurrentPlayers || 0) / (serverInfo?.MaxPlayers || 1)) * 100}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Join Key */}
-              <div className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-white/5">
-                <span className="text-gray-400 flex items-center gap-2 text-sm">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                    />
-                  </svg>
-                  Join Key
-                </span>
-                <span className="font-mono text-xs bg-gray-900 px-3 py-1.5 rounded-lg border border-white/10 text-green-400">
-                  {serverInfo?.JoinKey || "N/A"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </Dropdown>
-
-        {/* Players Section with enhanced styling */}
-        <Dropdown
-          title={`Players (${Object.values(players).reduce((sum, team) => sum + team.length, 0)})`}
-          icon={
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-              />
-            </svg>
-          }
-          defaultOpen={true}
-          accentColor="blue"
-        >
-          {Object.entries(players).map(([team, members]) => (
-            <div key={team} className="mb-4 last:mb-0">
-              <div className="flex items-center justify-between my-2 px-2">
-                <span className="font-semibold text-sm uppercase tracking-wider text-gray-400">
-                  {team}
-                </span>
-                <span className="text-xs bg-gray-700 px-2 py-1 rounded-full text-gray-300 border border-white/5">
-                  {members.length}
-                </span>
-              </div>
-              <div className="space-y-1">
-                {members.map((player) => (
-                  <div
-                    key={player.Player}
-                    className={`group flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 
-                ${
-                  selectedPlayer?.Player === player.Player
-                    ? "bg-gradient-to-r from-blue-600/30 to-purple-600/30 border border-blue-500/50 shadow-lg shadow-blue-500/10"
-                    : "hover:bg-white/5 border border-transparent"
-                }`}
-                    onClick={() => togglePlayerPopup(player)}
-                  >
-                    <div
-                      className={`w-2.5 h-2.5 rounded-full shadow-lg ${getTeamColor(team)}`}
-                    ></div>
-                    <span className="flex-1 truncate text-sm font-medium text-gray-200">
-                      {player.Player.split(":")[0]}
-                    </span>
-                    {player.Location && (
-                      <span className="text-xs text-gray-500 group-hover:text-gray-400 transition-colors">
-                        📍
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </Dropdown>
-
-        {/* Staff Section */}
-        <Dropdown
-          title={`Staff (${["Admins", "Mods", "Helpers"].reduce((sum, r) => sum + (staff[r] ? Object.keys(staff[r]).length : 0), 0)})`}
-          icon={
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          }
-          accentColor="purple"
-        >
-          {["Admins", "Mods", "Helpers"].map((role) => (
-            <div key={role} className="mb-4 last:mb-0">
-              <div className="flex items-center justify-between my-2 px-2">
-                <span className="font-semibold text-sm uppercase tracking-wider text-gray-400">
-                  {role}
-                </span>
-                <span className="text-xs bg-gray-700 px-2 py-1 rounded-full text-gray-300 border border-white/5">
-                  {staff[role] ? Object.keys(staff[role]).length : 0}
-                </span>
-              </div>
-              <div className="space-y-1">
-                {staff[role] &&
-                  Object.values(staff[role]).map((name, i) => (
-                    <div
-                      key={i}
-                      className="px-3 py-1.5 text-sm text-gray-300 hover:bg-white/5 rounded-lg transition-colors truncate border border-transparent hover:border-white/5"
-                    >
-                      {name}
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </Dropdown>
-
-        {/* Join Logs */}
-        <Dropdown
-          title={`Join Logs (${joinLogs.length})`}
-          icon="📝"
-          accentColor="blue"
-        >
-          <div className="space-y-1 mt-3">
-            {joinLogs.slice(0, 20).map((log, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 px-2 py-1.5 text-xs bg-white/5 rounded border border-white/5"
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${log.Join ? "bg-green-500" : "bg-red-500"}`}
-                ></span>
-                <span className="text-blue-300 font-medium">
-                  {log.Player?.split(":")[0]}
-                </span>
-                <span className="text-white/40">
-                  ({log.Player?.split(":")[1]})
-                </span>
-                <span className="text-white/40">
-                  {log.Join ? "joined" : "left"}
-                </span>
-                <span className="text-white/30 ml-auto text-[10px]">
-                  {new Date(log.Timestamp * 1000).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Dropdown>
-
-        {/* Queue */}
-        <Dropdown
-          title={`Queue (${queue.length})`}
-          icon="⏳"
-          accentColor="yellow"
-        >
-          <div className="space-y-1 mt-3">
-            {queue.slice(0, 20).map((player, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 px-2 py-1.5 text-xs bg-white/5 rounded border border-white/5"
-              >
-                <span className="text-white/40">#{i + 1}</span>
-                <span className="text-yellow-300 font-medium">{player}</span>
-              </div>
-            ))}
-          </div>
-        </Dropdown>
-
-        {/* Kill Logs */}
-        <Dropdown
-          title={`Kill Logs (${killLogs.length})`}
-          icon="💀"
-          accentColor="red"
-        >
-          <div className="space-y-1 mt-3">
-            {killLogs.slice(0, 20).map((kill, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-1 px-2 py-1.5 text-xs bg-white/5 rounded border border-white/5"
-              >
-                <span className="text-red-300 font-medium">
-                  {kill.Killer?.split(":")[0] || "?"}
-                </span>
-                <span className="text-white/40">→</span>
-                <span className="text-green-300 font-medium">
-                  {kill.Killed?.split(":")[0] || "?"}
-                </span>
-                <span className="text-white/30 ml-auto text-[10px]">
-                  {new Date(kill.Timestamp * 1000).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Dropdown>
-
-        {/* Command Logs */}
-        <Dropdown
-          title={`Commands (${commandLogs.length})`}
-          icon="⌨️"
-          accentColor="purple"
-        >
-          <div className="space-y-1 mt-3">
-            {commandLogs.slice(0, 20).map((cmd, i) => (
-              <div
-                key={i}
-                className="px-2 py-1.5 text-xs bg-white/5 rounded border border-white/5"
-              >
-                <span className="text-purple-300 font-medium">
-                  {cmd.Player?.split(":")[0]}
-                </span>
-                <span className="text-white/40 ml-1">
-                  ({cmd.Player?.split(":")[1]})
-                </span>
-                <span className="text-white/60 ml-2">"{cmd.Command}"</span>
-                <span className="text-white/30 float-right text-[10px]">
-                  {new Date(cmd.Timestamp * 1000).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Dropdown>
-
-        {/* Mod Calls */}
-        <Dropdown
-          title={`Mod Calls (${modCalls.length})`}
-          icon="📢"
-          accentColor="pink"
-        >
-          <div className="space-y-1 mt-3">
-            {modCalls.slice(0, 20).map((call, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-1 px-2 py-1.5 text-xs bg-white/5 rounded border border-white/5"
-              >
-                <span className="text-yellow-300 font-medium">
-                  {call.Caller?.split(":")[0]}
-                </span>
-                <span className="text-white/40">→</span>
-                <span className="text-purple-300 font-medium">
-                  {call.Moderator?.split(":")[0]}
-                </span>
-                <span className="text-white/30 ml-auto text-[10px]">
-                  {new Date(call.Timestamp * 1000).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Dropdown>
-
-        {/* Vehicles - With Color Bar */}
-        <Dropdown
-          title={`Vehicles (${vehicles.length})`}
-          icon="🚗"
-          accentColor="cyan"
-        >
-          <div className="space-y-1 mt-3">
-            {vehicles.slice(0, 20).map((vehicle, i) => (
-              <div
-                key={i}
-                className="relative bg-white/5 rounded border border-white/5 overflow-hidden"
-              >
-                {/* Color bar on left */}
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1.5"
-                  style={{ backgroundColor: vehicle.ColorHex || "#888" }}
-                />
-
-                {/* Vehicle details */}
-                <div className="pl-4 p-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-cyan-300 font-medium text-xs">
-                      {vehicle.Name}
-                    </span>
-                    {vehicle.Texture && vehicle.Texture !== "Livery Name" && (
-                      <span className="text-white/30 text-[10px]">
-                        {vehicle.Texture}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-white/60 text-[10px]">
-                      {vehicle.Owner}
-                    </span>
-                    {vehicle.ColorName && (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={{
-                          backgroundColor: `${vehicle.ColorHex}20`,
-                          color: vehicle.ColorHex
-                        }}
-                      >
-                        {vehicle.ColorName}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Dropdown>
       </div>
 
       {/* Map Container */}
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-gray-900"
+        onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
+        {/* Mobile Header */}
+        <div className="absolute top-0 left-0 right-0 z-20 md:hidden bg-gray-800 p-3 border-b border-gray-700">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center"
+            >
+              <svg
+                className="w-6 h-6 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+            <h1 className="text-lg font-bold text-white">City Of London</h1>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center"
+            >
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+
         {/* Map Controls */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
+          <div className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg">
+            <span
+              className={`${serverInfo?.CurrentPlayers > 35 ? "text-red-500" : serverInfo?.CurrentPlayers >= 30 ? "text-orange-500" : serverInfo?.CurrentPlayers >= 10 ? "text-yellow-500" : serverInfo?.CurrentPlayers === 0 ? "text-red-500" : "text-green-500"}`}
+            >
+              {serverInfo?.CurrentPlayers}
+            </span>
+            /{serverInfo?.MaxPlayers}
+          </div>
           <button
-            onClick={resetView}
-            className="bg-gray-800/90 backdrop-blur-sm p-3 rounded-lg hover:bg-gray-700/90 transition-all shadow-lg border border-gray-700/50"
-            title="Reset view"
+            onClick={() => setIsSettingsOpen(true)}
+            className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg"
           >
             <svg
-              className="w-5 h-5"
+              className="w-4 h-4 md:w-5 md:h-5 text-white"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -688,16 +411,42 @@ export default function Home() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
           </button>
-          <div className="bg-gray-800/90 backdrop-blur-sm px-3 py-2 rounded-lg text-sm border border-gray-700/50">
-            Zoom: {Math.round(transform.scale * 100)}%
+          <button
+            onClick={resetView}
+            className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg"
+            title="Reset view"
+          >
+            <svg
+              className="w-4 h-4 md:w-5 md:h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+              />
+            </svg>
+          </button>
+
+          <div className="bg-gray-800 p-2 md:p-3 rounded-lg text-xs md:text-sm border border-gray-700 shadow-lg text-white">
+            {Math.round(transform.scale * 100)}%
           </div>
         </div>
 
-        {/* Map Image with Transform */}
+        {/* Map Image - Scaled container */}
         <div
           style={{
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
@@ -705,17 +454,13 @@ export default function Home() {
             position: "absolute",
             top: 0,
             left: 0,
-            cursor: isDragging.current ? "grabbing" : "grab",
-            transition: isDragging.current ? "none" : "transform 0.1s ease-out",
             width: MAP_IMAGE_SIZE,
-            height: MAP_IMAGE_SIZE,
-            willChange: "transform"
+            height: MAP_IMAGE_SIZE
           }}
-          onMouseDown={handleMouseDown}
         >
           <img
             ref={mapRef}
-            src="/erlc-map.png"
+            src={MAP_STYLES[mapStyle]}
             alt="Map"
             draggable={false}
             className="select-none pointer-events-none"
@@ -725,32 +470,97 @@ export default function Home() {
               display: "block"
             }}
             onLoad={() => centerMap()}
+            onError={(e) => (e.target.src = MAP_STYLES["normal-locations"])}
           />
+        </div>
 
-          {/* Markers */}
-          {Object.values(markers).map((m) => (
-            <div
-              key={m.player.Player}
-              className={`absolute w-5 h-5 rounded-full border-2 border-white shadow-lg cursor-pointer transition-all hover:scale-150 ${getTeamColor(
-                m.team
-              )} ${
-                selectedPlayer?.Player === m.player.Player
-                  ? "scale-150 ring-4 ring-white/50 z-20"
-                  : "z-10"
-              }`}
-              style={{
-                left: m.x - 10,
-                top: m.y - 10,
-                boxShadow: "0 2px 10px rgba(0,0,0,0.3)"
-              }}
-              onClick={() => togglePlayerPopup(m.player)}
-            />
-          ))}
+        {/* Markers - Separate container, not scaled */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            pointerEvents: "none"
+          }}
+        >
+          {Object.values(markers).map((m) => {
+            const screenX = m.x * transform.scale + transform.x;
+            const screenY = m.y * transform.scale + transform.y;
+            const baseSize = 15;
+            const scaleFactor = 0.3 / transform.scale;
+            const scaledSize = Math.max(
+              12,
+              Math.min(20, baseSize * Math.min(scaleFactor, 2))
+            );
+
+            return (
+              <div
+                key={m.player.Player}
+                style={{
+                  position: "absolute",
+                  left: screenX,
+                  top: screenY,
+                  transform: "translate(-50%, -50%)",
+                  zIndex: selectedPlayer?.Player === m.player.Player ? 30 : 10,
+                  pointerEvents: "auto"
+                }}
+                onMouseEnter={() => {
+                  if (nameDisplay === "hover") {
+                    setSelectedPlayer(m.player);
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (nameDisplay === "hover") {
+                    setSelectedPlayer(null);
+                  }
+                }}
+              >
+                {/* Username - Above the icon */}
+                {(nameDisplay === "always" ||
+                  selectedPlayer?.Player === m.player.Player) && (
+                  <div
+                    className="absolute whitespace-nowrap"
+                    style={{
+                      left: "50%",
+                      bottom: "100%",
+                      transform: "translateX(-50%)",
+                      marginBottom: "4px",
+                      zIndex: 40
+                    }}
+                  >
+                    <div className="bg-gray-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-white border border-gray-700 shadow-lg">
+                      {m.player.Player.split(":")[0]} ({m.player?.Callsign})
+                    </div>
+                  </div>
+                )}
+
+                {/* Player Icon */}
+                <div
+                  className={`rounded-full border-2 border-white cursor-pointer transition-all hover:brightness-110 ${getTeamColor(m.team)} ${
+                    selectedPlayer?.Player === m.player.Player
+                      ? "ring-2 ring-white"
+                      : ""
+                  }`}
+                  style={{
+                    width: `${scaledSize}px`,
+                    height: `${scaledSize}px`,
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePlayerPopup(m.player);
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
 
         {/* Player Popup */}
         {selectedPlayer && (
-          <div className="absolute bottom-4 right-4 bg-gray-800/95 backdrop-blur-sm p-5 rounded-xl shadow-2xl w-80 z-50 border border-gray-700/50">
+          <div className="absolute bottom-4 right-4 bg-gray-800 p-5 rounded-xl w-80 z-50 border border-gray-700 shadow-2xl">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div
@@ -758,20 +568,18 @@ export default function Home() {
                 >
                   👤
                 </div>
-                <div className="min-w-0">
-                  <div className="font-bold text-lg truncate">
+                <div>
+                  <div className="font-bold text-lg">
                     {selectedPlayer.Player.split(":")[0]}
                   </div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${getTeamBadgeColor(selectedPlayer.Team)}`}
-                  >
+                  <span className="text-xs text-gray-400">
                     {selectedPlayer.Team}
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedPlayer(null)}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-gray-400 hover:text-white"
               >
                 <svg
                   className="w-5 h-5"
@@ -790,21 +598,18 @@ export default function Home() {
             </div>
 
             {selectedPlayer.Location && (
-              <div className="space-y-2 border-t border-gray-700 pt-3">
-                <h3 className="text-sm font-semibold text-gray-300 mb-2">
-                  Location
-                </h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-gray-700/50 rounded-lg p-2">
+              <div className="border-t border-gray-700 pt-3">
+                <h3 className="text-sm text-gray-400 mb-2">Location</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-900 rounded-lg p-2 text-center">
                     <div className="text-xs text-gray-400">X</div>
-                    <div className="font-mono text-sm">
+                    <div className="font-mono">
                       {Math.round(selectedPlayer.Location.LocationX)}
                     </div>
                   </div>
-
-                  <div className="bg-gray-700/50 rounded-lg p-2">
+                  <div className="bg-gray-900 rounded-lg p-2 text-center">
                     <div className="text-xs text-gray-400">Z</div>
-                    <div className="font-mono text-sm">
+                    <div className="font-mono">
                       {Math.round(selectedPlayer.Location.LocationZ)}
                     </div>
                   </div>
@@ -814,71 +619,582 @@ export default function Home() {
 
             <button
               onClick={() => setSelectedPlayer(null)}
-              className="mt-4 w-full py-2 bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all text-sm font-medium shadow-lg"
+              className="mt-4 w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-sm transition-colors"
             >
               Close
             </button>
           </div>
         )}
       </div>
+
+      <div className="hidden md:block fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 w-150">
+        <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
+        <div className="relative px-4 pt-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-400">
+              Server Capacity
+            </span>
+            <span
+              className={`text-xs font-bold ${
+                serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.8
+                  ? "text-red-400"
+                  : serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.5
+                    ? "text-yellow-400"
+                    : "text-green-400"
+              }`}
+            >
+              {serverInfo?.CurrentPlayers || 0}/{serverInfo?.MaxPlayers || 0}{" "}
+              Players
+            </span>
+          </div>
+
+          <div className="relative h-12">
+            <div className="absolute inset-0 left-0 right-0">
+              <div className="absolute inset-0 flex items-center justify-between px-0">
+                {[0, 10, 20, 30, 40].map((num, index) => (
+                  <div
+                    key={num}
+                    className="flex flex-col items-center"
+                    style={{
+                      position: "absolute",
+                      left: `${(num / 40) * 100}%`,
+                      transform: "translateX(-50%)"
+                    }}
+                  >
+                    <span className="text-[9px] text-white/40 mt-1">{num}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="absolute inset-0">
+                {[...Array(21)].map((_, i) => {
+                  const position = i * 5;
+                  return (
+                    <div
+                      key={i}
+                      className="absolute top-0"
+                      style={{
+                        left: `${position}%`,
+                        transform: "translateX(-50%)"
+                      }}
+                    >
+                      <div
+                        className={`w-px ${i % 5 === 0 ? "h-4 bg-white/40" : "h-2.5 bg-white/20"}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div
+                className="absolute bottom-0 left-0 h-2.5 rounded-full transition-all duration-500 z-10"
+                style={{
+                  width: `${Math.min(100, ((serverInfo?.CurrentPlayers || 0) / (serverInfo?.MaxPlayers || 1)) * 100)}%`,
+                  backgroundColor: (() => {
+                    const percent =
+                      (serverInfo?.CurrentPlayers || 0) /
+                      (serverInfo?.MaxPlayers || 1);
+                    if (percent > 0.8) return "#ef4444";
+                    if (percent > 0.5) return "#eab308";
+                    return "#22c55e";
+                  })(),
+                  bottom: "4px",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        mapStyle={mapStyle}
+        setMapStyle={setMapStyle}
+        nameDisplay={nameDisplay}
+        setNameDisplay={setNameDisplay}
+        MAP_STYLES={MAP_STYLES}
+      />
     </div>
   );
 }
 
-// Modern Dropdown Component
-const Dropdown = ({
-  title,
-  icon,
-  children,
-  defaultOpen = false,
-  accentColor = "blue"
+const SidebarContent = ({
+  serverInfo,
+  players,
+  staff,
+  joinLogs,
+  queue,
+  killLogs,
+  commandLogs,
+  modCalls,
+  vehicles,
+  selectedPlayer,
+  togglePlayerPopup,
+  getTeamColor,
+  nameDisplay,
+  setSelectedPlayer
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="space-y-4">
+      <Dropdown title="Server Status" icon="🖥️">
+        <ServerStatusContent serverInfo={serverInfo} />
+      </Dropdown>
 
-  const accentColors = {
-    blue: "from-blue-600 to-blue-400",
-    purple: "from-purple-600 to-purple-400",
-    green: "from-green-600 to-green-400",
-    red: "from-red-600 to-red-400"
-  };
+      {players.length > 0 && (
+        <Dropdown
+          title={`Players (${Object.values(players).reduce((sum, team) => sum + team.length, 0)})`}
+          icon="👥"
+          defaultOpen={true}
+        >
+          <PlayersContent
+            players={players}
+            selectedPlayer={selectedPlayer}
+            togglePlayerPopup={togglePlayerPopup}
+            getTeamColor={getTeamColor}
+            nameDisplay={nameDisplay}
+            setSelectedPlayer={setSelectedPlayer}
+          />
+        </Dropdown>
+      )}
+
+      {queue.length > 0 && (
+        <Dropdown title={`Queue (${queue.length})`} icon="⏳">
+          <QueueContent queue={queue} />
+        </Dropdown>
+      )}
+
+      {vehicles.length > 0 && (
+        <Dropdown title={`Vehicles (${vehicles.length})`} icon="🚗">
+          <VehiclesContent vehicles={vehicles} />
+        </Dropdown>
+      )}
+    </div>
+  );
+};
+
+const Dropdown = ({ title, icon, children, defaultOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-gray-700/50 rounded-lg overflow-hidden border border-gray-600">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-600 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-white">{icon}</span>
+          <span className="font-medium text-white">{title}</span>
+        </div>
+        <svg
+          className={`w-5 h-5 text-gray-300 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out ${isOpen ? "max-h-96" : "max-h-0"} overflow-y-auto`}
+      >
+        <div className="p-4 border-t border-gray-600">{children}</div>
+      </div>
+    </div>
+  );
+};
+
+const ServerStatusContent = ({ serverInfo }) => (
+  <div className="space-y-3">
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-gray-300">Server Name</span>
+      <span className="text-sm font-medium text-white">{serverInfo?.Name}</span>
+    </div>
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-gray-300">Players</span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-white">
+          {serverInfo?.CurrentPlayers}/{serverInfo?.MaxPlayers}
+        </span>
+        <div className="w-16 h-1.5 bg-gray-600 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.8 ? "bg-red-500" : "bg-green-500"}`}
+            style={{
+              width: `${((serverInfo?.CurrentPlayers || 0) / (serverInfo?.MaxPlayers || 1)) * 100}%`
+            }}
+          />
+        </div>
+      </div>
+    </div>
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-gray-300">Join Key</span>
+      <span className="font-mono text-xs bg-gray-900 px-2 py-1 rounded text-green-400">
+        {serverInfo?.JoinKey || "N/A"}
+      </span>
+    </div>
+  </div>
+);
+
+const PlayersContent = ({
+  players,
+  selectedPlayer,
+  togglePlayerPopup,
+  getTeamColor,
+  nameDisplay,
+  setSelectedPlayer
+}) => (
+  <div className="space-y-4">
+    {Object.entries(players).map(([team, members]) => (
+      <div key={team}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${getTeamColor(team)}`} />
+            <span className="text-sm font-medium text-gray-300">{team}</span>
+          </div>
+          <span className="text-xs bg-gray-600 px-2 py-0.5 rounded-full text-gray-300">
+            {members.length}
+          </span>
+        </div>
+        <div className="space-y-1">
+          {members.map((player) => (
+            <div
+              key={player.Player}
+              onClick={() => togglePlayerPopup(player)}
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${selectedPlayer?.Player === player.Player ? "bg-gray-600" : "hover:bg-gray-600"}`}
+              onMouseEnter={() => {
+                if (nameDisplay === "hover") {
+                  setSelectedPlayer(player);
+                }
+              }}
+              onMouseLeave={() => {
+                if (nameDisplay === "hover") {
+                  setSelectedPlayer(null);
+                }
+              }}
+            >
+              <div className={`w-2 h-2 rounded-full ${getTeamColor(team)}`} />
+              <span className="flex-1 text-sm text-gray-200 truncate">
+                {player.Player.split(":")[0]}
+              </span>
+              {player.Location && (
+                <span className="text-xs text-gray-400">
+                  {player.Location?.BuildingNumber}{" "}
+                  {player.Location?.StreetName}, ({player.Location?.PostalCode})
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const StaffContent = ({ staff }) => (
+  <div className="space-y-4">
+    {["Admins", "Mods", "Helpers"].map((role) => (
+      <div key={role}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-300">{role}</span>
+          <span className="text-xs bg-gray-600 px-2 py-0.5 rounded-full text-gray-300">
+            {staff[role] ? Object.keys(staff[role]).length : 0}
+          </span>
+        </div>
+        <div className="space-y-1">
+          {staff[role] &&
+            Object.values(staff[role]).map((name, i) => (
+              <div
+                key={i}
+                className="px-3 py-1.5 text-sm text-gray-300 bg-gray-600 rounded-lg"
+              >
+                {name}
+              </div>
+            ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const JoinLogsContent = ({ joinLogs }) => (
+  <div className="space-y-1">
+    {joinLogs.slice(0, 20).map((log, i) => (
+      <div
+        key={i}
+        className="flex items-center gap-2 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
+      >
+        <span
+          className={`w-1.5 h-1.5 rounded-full ${log.Join ? "bg-green-500" : "bg-red-500"}`}
+        />
+        <span className="text-blue-300">{log.Player?.split(":")[0]}</span>
+        <span className="text-gray-400">({log.Player?.split(":")[1]})</span>
+        <span className="text-gray-400">{log.Join ? "joined" : "left"}</span>
+        <span className="text-gray-500 ml-auto">
+          {new Date(log.Timestamp * 1000).toLocaleTimeString()}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+const QueueContent = ({ queue }) => (
+  <div className="space-y-1">
+    {queue.slice(0, 20).map((player, i) => (
+      <div
+        key={i}
+        className="flex items-center gap-2 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
+      >
+        <span className="text-gray-400">#{i + 1}</span>
+        <span className="text-yellow-300">{player}</span>
+      </div>
+    ))}
+  </div>
+);
+
+const KillLogsContent = ({ killLogs }) => (
+  <div className="space-y-1">
+    {killLogs.slice(0, 20).map((kill, i) => (
+      <div
+        key={i}
+        className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
+      >
+        <span className="text-red-300">
+          {kill.Killer?.split(":")[0] || "?"}
+        </span>
+        <span className="text-gray-400">→</span>
+        <span className="text-green-300">
+          {kill.Killed?.split(":")[0] || "?"}
+        </span>
+        <span className="text-gray-500 ml-auto">
+          {new Date(kill.Timestamp * 1000).toLocaleTimeString()}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+const CommandLogsContent = ({ commandLogs }) => (
+  <div className="space-y-1">
+    {commandLogs.slice(0, 20).map((cmd, i) => (
+      <div
+        key={i}
+        className="px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
+      >
+        <span className="text-purple-300">{cmd.Player?.split(":")[0]}</span>
+        <span className="text-gray-400 ml-1">
+          ({cmd.Player?.split(":")[1]})
+        </span>
+        <span className="text-gray-300 ml-2">"{cmd.Command}"</span>
+        <span className="text-gray-500 float-right">
+          {new Date(cmd.Timestamp * 1000).toLocaleTimeString()}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+const ModCallsContent = ({ modCalls }) => (
+  <div className="space-y-1">
+    {modCalls.slice(0, 20).map((call, i) => (
+      <div
+        key={i}
+        className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
+      >
+        <span className="text-yellow-300">{call.Caller?.split(":")[0]}</span>
+        <span className="text-gray-400">→</span>
+        <span className="text-purple-300">{call.Moderator?.split(":")[0]}</span>
+        <span className="text-gray-500 ml-auto">
+          {new Date(call.Timestamp * 1000).toLocaleTimeString()}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+const VehiclesContent = ({ vehicles }) => (
+  <div className="space-y-1">
+    {vehicles.slice(0, 20).map((vehicle, i) => (
+      <div
+        key={i}
+        className="relative bg-gray-600 rounded border border-gray-500 overflow-hidden"
+      >
+        {/* Color bar */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5"
+          style={{ backgroundColor: vehicle.ColorHex || "#888" }}
+        />
+
+        <div className="pl-4 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-cyan-300 text-xs">{vehicle.Name}</span>
+            {vehicle.Texture && vehicle.Texture !== "Livery Name" && (
+              <span className="text-gray-400 text-[10px]">
+                {vehicle.Texture}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-gray-400 text-[10px]">{vehicle.Owner}</span>
+            {vehicle.ColorName && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded"
+                style={{
+                  backgroundColor: `${vehicle.ColorHex}20`,
+                  color: vehicle.ColorHex
+                }}
+              >
+                {vehicle.ColorName}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const SettingsModal = ({
+  isOpen,
+  onClose,
+  mapStyle,
+  setMapStyle,
+  nameDisplay,
+  setNameDisplay,
+  MAP_STYLES
+}) => {
+  const [showLocations, setShowLocations] = useState(
+    mapStyle.includes("locations")
+  );
+  const [mapBase, setMapBase] = useState(
+    mapStyle.includes("winter") ? "winter" : "normal"
+  );
+  useEffect(() => {
+    if (showLocations) {
+      setMapStyle(`${mapBase}-locations`);
+    } else {
+      setMapStyle(mapBase);
+    }
+  }, [mapBase, showLocations, setMapStyle]);
+
+  if (!isOpen) return null;
 
   return (
-    <div className="relative group">
-      <div
-        className={`absolute -inset-0.5 bg-gradient-to-r ${accentColors[accentColor]} rounded-xl blur opacity-20 group-hover:opacity-30 transition duration-300`}
-      ></div>
-      <div className="relative bg-gray-800/90 rounded-xl border border-white/10 overflow-hidden backdrop-blur-sm">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-8 h-8 rounded-lg bg-gradient-to-br ${accentColors[accentColor]} bg-opacity-20 flex items-center justify-center`}
-            >
-              <span className="text-white">{icon}</span>
-            </div>
-            <span className="font-semibold text-white">{title}</span>
-          </div>
-          <svg
-            className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+      <div className="bg-gray-800 rounded-xl w-full max-w-md border border-gray-700 shadow-2xl">
+        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+          <h2 className="text-xl font-semibold text-white">Settings</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
 
-        <div
-          className={`transition-all duration-300 ease-in-out ${isOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"} overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent`}
-        >
-          <div className="p-4 pt-0 border-t border-white/5">{children}</div>
+        <div className="p-6 space-y-6">
+          {/* Map Theme - Toggle Switch */}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-400">
+                Map Theme
+              </label>
+              <button
+                onClick={() =>
+                  setMapBase(mapBase === "normal" ? "winter" : "normal")
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  mapBase === "winter" ? "bg-blue-600" : "bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    mapBase === "winter" ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Toggle between normal and winter map themes.
+            </p>
+          </div>
+
+          {/* Locations - Toggle Switch */}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-400">
+                Locations
+              </label>
+              <button
+                onClick={() => setShowLocations(!showLocations)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showLocations ? "bg-blue-600" : "bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showLocations ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Show or hide postal codes and street names on the map.
+            </p>
+          </div>
+
+          {/* Player Names - Toggle Switch */}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-400">
+                Player Names
+              </label>
+              <button
+                onClick={() =>
+                  setNameDisplay(nameDisplay === "hover" ? "always" : "hover")
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  nameDisplay === "always" ? "bg-blue-600" : "bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    nameDisplay === "always" ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Always show player names or only on hover/click.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-gray-700">
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-blue-600 rounded-lg text-white font-medium hover:bg-blue-700 transition-colors"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>

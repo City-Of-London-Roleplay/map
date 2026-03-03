@@ -5,25 +5,36 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Light theme */
+html.light {
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html.light body {
+  background-color: #f3f4f6;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+html.light .bg-gray-900 {
+  background-color: #f9fafb;
 }
+
+html.light .text-white {
+  color: #111827;
+}
+
+html.light .text-gray-400 {
+  color: #6b7280;
+}
+
+html.light .bg-gray-800\/90 {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+html.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Add more light theme overrides as needed */
 
 /* Scrollbar styling */
 .scrollbar-thin::-webkit-scrollbar {
