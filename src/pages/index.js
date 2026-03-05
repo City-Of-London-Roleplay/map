@@ -347,8 +347,8 @@ export default function Home() {
         <meta property="og:title" content={getMetaTitle()} />
         <meta property="og:description" content={getMetaDescription()} />
         <meta property="og:image" content={getOGImageUrl()} />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
+        <meta property="og:image:width" content="3121" />
+        <meta property="og:image:height" content="3121" />
 
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
