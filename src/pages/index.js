@@ -1,7 +1,9 @@
-// pages/index.js
 import { useEffect, useState, useRef, useCallback } from "react";
+import Head from "next/head";
+import { useRouter } from "next/router";
 
 export default function Home() {
+  const router = useRouter();
   const [serverInfo, setServerInfo] = useState(null);
   const [players, setPlayers] = useState({});
   const [staff, setStaff] = useState({});
@@ -18,6 +20,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [mapStyle, setMapStyle] = useState("normal-locations");
   const [nameDisplay, setNameDisplay] = useState("hover");
+  const [urlProcessed, setUrlProcessed] = useState(false);
 
   const MAP_STYLES = {
     normal: "https://map.col-erlc.ca/normal.png",
@@ -40,6 +43,55 @@ export default function Home() {
 
   const MAP_SIZE = 3121;
   const MAP_IMAGE_SIZE = 3121;
+
+  // Process URL parameters
+  useEffect(() => {
+    if (!urlProcessed && Object.keys(players).length > 0 && router.isReady) {
+      const { user, team } = router.query;
+
+      if (user) {
+        // Find user by name or ID
+        const userLower = user.toLowerCase();
+        let foundPlayer = null;
+
+        Object.values(players).forEach((team) => {
+          team.forEach((player) => {
+            const playerName = player.Player.split(":")[0].toLowerCase();
+            const playerId = player.Player.split(":")[1];
+
+            if (playerName.includes(userLower) || playerId === user) {
+              foundPlayer = player;
+            }
+          });
+        });
+
+        if (foundPlayer) {
+          setSelectedPlayer(foundPlayer);
+          setTimeout(() => focusOnPlayer(foundPlayer.Player), 500);
+        }
+      }
+
+      if (team) {
+        // Find team and focus on first player in that team
+        const teamLower = team.toLowerCase();
+        let teamPlayers = [];
+
+        Object.entries(players).forEach(([teamName, members]) => {
+          if (teamName.toLowerCase().includes(teamLower)) {
+            teamPlayers = members;
+          }
+        });
+
+        if (teamPlayers.length > 0) {
+          // Focus on the first player in the team
+          setSelectedPlayer(teamPlayers[0]);
+          setTimeout(() => focusOnPlayer(teamPlayers[0].Player), 500);
+        }
+      }
+
+      setUrlProcessed(true);
+    }
+  }, [players, router.isReady, router.query, urlProcessed, focusOnPlayer]);
 
   const centerMap = useCallback(() => {
     if (!containerRef.current || !mapRef.current) return;
@@ -242,43 +294,143 @@ export default function Home() {
 
   const resetView = () => centerMap();
 
+  // Generate meta description based on URL params
+  const getMetaDescription = () => {
+    const { user, team } = router.query;
+    if (user) {
+      return `Live tracking of player ${user} on City of London ERLC server`;
+    }
+    if (team) {
+      return `Live tracking of ${team} team on City of London ERLC server`;
+    }
+    return "Live map tracking for City of London ERLC server - Track players, vehicles, and staff in real-time";
+  };
+
+  // Generate meta title based on URL params
+  const getMetaTitle = () => {
+    const { user, team } = router.query;
+    if (user) {
+      return `City of London - Tracking ${user}`;
+    }
+    if (team) {
+      return `City of London - ${team} Team`;
+    }
+    return "City of London ERLC Live Map";
+  };
+
+  // Generate Open Graph image URL (you'll need to create an API endpoint for this)
+  const getOGImageUrl = () => {
+    const { user, team } = router.query;
+    const baseUrl = "https://map.col-erlc.ca";
+
+    if (user) {
+      return `${baseUrl}/api/og?type=user&value=${encodeURIComponent(user)}`;
+    }
+    if (team) {
+      return `${baseUrl}/api/og?type=team&value=${encodeURIComponent(team)}`;
+    }
+    return `${baseUrl}/api/og?type=default`;
+  };
+
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-900 text-white">
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/70 z-40 md:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
+    <>
+      <Head>
+        <title>{getMetaTitle()}</title>
+        <meta name="description" content={getMetaDescription()} />
+
+        {/* Open Graph / Facebook */}
+        <meta property="og:type" content="website" />
+        <meta
+          property="og:url"
+          content={typeof window !== "undefined" ? window.location.href : ""}
         />
-      )}
-      <div
-        className={`fixed top-0 left-0 h-full w-80 z-50 transform transition-transform duration-300 ease-in-out md:hidden overflow-y-auto ${
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="absolute inset-0 bg-gray-900/90 backdrop-blur-md" />
-        <div className="relative p-4">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-white">Menu</h2>
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 backdrop-blur-sm border border-white/10"
-            >
-              <svg
-                className="w-5 h-5 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+        <meta property="og:title" content={getMetaTitle()} />
+        <meta property="og:description" content={getMetaDescription()} />
+        <meta property="og:image" content={getOGImageUrl()} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={getMetaTitle()} />
+        <meta name="twitter:description" content={getMetaDescription()} />
+        <meta name="twitter:image" content={getOGImageUrl()} />
+
+        {/* Additional meta tags for Discord */}
+        <meta name="theme-color" content="#3B82F6" />
+      </Head>
+
+      <div className="flex h-screen overflow-hidden bg-gray-900 text-white">
+        {isMobileMenuOpen && (
+          <div
+            className="fixed inset-0 bg-black/70 z-40 md:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+        <div
+          className={`fixed top-0 left-0 h-full w-80 z-50 transform transition-transform duration-300 ease-in-out md:hidden overflow-y-auto ${
+            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="absolute inset-0 bg-gray-900/90 backdrop-blur-md" />
+          <div className="relative p-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Menu</h2>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 backdrop-blur-sm border border-white/10"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <SidebarContent
+                serverInfo={serverInfo}
+                players={players}
+                staff={staff}
+                joinLogs={joinLogs}
+                queue={queue}
+                killLogs={killLogs}
+                commandLogs={commandLogs}
+                modCalls={modCalls}
+                vehicles={vehicles}
+                selectedPlayer={selectedPlayer}
+                togglePlayerPopup={togglePlayerPopup}
+                getTeamColor={getTeamColor}
+                nameDisplay={nameDisplay}
+                setSelectedPlayer={setSelectedPlayer}
+              />
+            </div>
           </div>
-          <div className="space-y-4">
+        </div>
+        <div className="hidden md:block fixed top-4 left-4 w-96 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl">
+          <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
+          <div className="relative p-5">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-2xl font-bold text-white">
+                  City Of London
+                </h1>
+                <p className="text-xs text-gray-400">Live Map</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {isLoading && (
+                  <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                )}
+              </div>
+            </div>
             <SidebarContent
               serverInfo={serverInfo}
               players={players}
@@ -297,62 +449,138 @@ export default function Home() {
             />
           </div>
         </div>
-      </div>
-      <div className="hidden md:block fixed top-4 left-4 w-96 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl">
-        <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
-        <div className="relative p-5">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-white">City Of London</h1>
-              <p className="text-xs text-gray-400">Live Map</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isLoading && (
-                <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              )}
+
+        {/* Map Container */}
+        <div
+          ref={containerRef}
+          className="flex-1 relative overflow-hidden bg-gray-900"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Mobile Header */}
+          <div className="absolute top-0 left-0 right-0 z-20 md:hidden bg-gray-900/90 backdrop-blur-md p-3 border-b border-white/10">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="w-10 h-10 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 border border-white/10 shrink-0"
+              >
+                <svg
+                  className="w-6 h-6 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              </button>
+
+              <h1 className="text-lg font-bold text-white truncate flex-1 text-center">
+                City Of London
+              </h1>
+
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Player count */}
+                <div className="bg-gray-800/80 px-2 py-1.5 rounded-lg border border-white/10 text-xs whitespace-nowrap">
+                  <span
+                    className={`
+            ${
+              serverInfo?.CurrentPlayers > 35
+                ? "text-red-500"
+                : serverInfo?.CurrentPlayers >= 30
+                  ? "text-orange-500"
+                  : serverInfo?.CurrentPlayers >= 10
+                    ? "text-yellow-500"
+                    : serverInfo?.CurrentPlayers === 0
+                      ? "text-red-500"
+                      : "text-green-500"
+            }
+          `}
+                  >
+                    {serverInfo?.CurrentPlayers || 0}
+                  </span>
+                  <span className="text-white/60">
+                    /{serverInfo?.MaxPlayers || 0}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 border border-white/10"
+                >
+                  <svg
+                    className="w-4 h-4 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={resetView}
+                  className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 border border-white/10"
+                  title="Reset view"
+                >
+                  <svg
+                    className="w-4 h-4 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                    />
+                  </svg>
+                </button>
+                <div className="bg-gray-800/80 px-2 py-1.5 rounded-lg border border-white/10 text-xs text-white">
+                  {Math.round(transform.scale * 100)}%
+                </div>
+              </div>
             </div>
           </div>
-          <SidebarContent
-            serverInfo={serverInfo}
-            players={players}
-            staff={staff}
-            joinLogs={joinLogs}
-            queue={queue}
-            killLogs={killLogs}
-            commandLogs={commandLogs}
-            modCalls={modCalls}
-            vehicles={vehicles}
-            selectedPlayer={selectedPlayer}
-            togglePlayerPopup={togglePlayerPopup}
-            getTeamColor={getTeamColor}
-            nameDisplay={nameDisplay}
-            setSelectedPlayer={setSelectedPlayer}
-          />
-        </div>
-      </div>
 
-      {/* Map Container */}
-      <div
-        ref={containerRef}
-        className="flex-1 relative overflow-hidden bg-gray-900"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Mobile Header */}
-        <div className="absolute top-0 left-0 right-0 z-20 md:hidden bg-gray-900/90 backdrop-blur-md p-3 border-b border-white/10">
-          <div className="flex items-center justify-between gap-2">
+          {/* Map Controls */}
+          <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <div className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg">
+              <span
+                className={`${serverInfo?.CurrentPlayers > 35 ? "text-red-500" : serverInfo?.CurrentPlayers >= 30 ? "text-orange-500" : serverInfo?.CurrentPlayers >= 10 ? "text-yellow-500" : serverInfo?.CurrentPlayers === 0 ? "text-red-500" : "text-green-500"}`}
+              >
+                {serverInfo?.CurrentPlayers}
+              </span>
+              /{serverInfo?.MaxPlayers}
+            </div>
             <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="w-10 h-10 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 border border-white/10 shrink-0"
+              onClick={() => setIsSettingsOpen(true)}
+              className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg"
             >
               <svg
-                className="w-6 h-6 text-white"
+                className="w-4 h-4 md:w-5 md:h-5 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -361,422 +589,317 @@ export default function Home() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+            </button>
+            <button
+              onClick={resetView}
+              className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg"
+              title="Reset view"
+            >
+              <svg
+                className="w-4 h-4 md:w-5 md:h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
                 />
               </svg>
             </button>
 
-            <h1 className="text-lg font-bold text-white truncate flex-1 text-center">
-              City Of London
-            </h1>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {/* Player count */}
-              <div className="bg-gray-800/80 px-2 py-1.5 rounded-lg border border-white/10 text-xs whitespace-nowrap">
-                <span
-                  className={`
-          ${
-            serverInfo?.CurrentPlayers > 35
-              ? "text-red-500"
-              : serverInfo?.CurrentPlayers >= 30
-                ? "text-orange-500"
-                : serverInfo?.CurrentPlayers >= 10
-                  ? "text-yellow-500"
-                  : serverInfo?.CurrentPlayers === 0
-                    ? "text-red-500"
-                    : "text-green-500"
-          }
-        `}
-                >
-                  {serverInfo?.CurrentPlayers || 0}
-                </span>
-                <span className="text-white/60">
-                  /{serverInfo?.MaxPlayers || 0}
-                </span>
-              </div>
-
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 border border-white/10"
-              >
-                <svg
-                  className="w-4 h-4 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </button>
-
-              <button
-                onClick={resetView}
-                className="w-8 h-8 bg-gray-800/80 rounded-lg flex items-center justify-center hover:bg-gray-700/80 border border-white/10"
-                title="Reset view"
-              >
-                <svg
-                  className="w-4 h-4 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                  />
-                </svg>
-              </button>
-              <div className="bg-gray-800/80 px-2 py-1.5 rounded-lg border border-white/10 text-xs text-white">
-                {Math.round(transform.scale * 100)}%
-              </div>
+            <div className="bg-gray-800 p-2 md:p-3 rounded-lg text-xs md:text-sm border border-gray-700 shadow-lg text-white">
+              {Math.round(transform.scale * 100)}%
             </div>
           </div>
-        </div>
 
-        {/* Map Controls */}
-        <div className="absolute top-4 right-4 z-10 flex gap-2">
-          <div className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg">
-            <span
-              className={`${serverInfo?.CurrentPlayers > 35 ? "text-red-500" : serverInfo?.CurrentPlayers >= 30 ? "text-orange-500" : serverInfo?.CurrentPlayers >= 10 ? "text-yellow-500" : serverInfo?.CurrentPlayers === 0 ? "text-red-500" : "text-green-500"}`}
-            >
-              {serverInfo?.CurrentPlayers}
-            </span>
-            /{serverInfo?.MaxPlayers}
-          </div>
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg"
-          >
-            <svg
-              className="w-4 h-4 md:w-5 md:h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={resetView}
-            className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg"
-            title="Reset view"
-          >
-            <svg
-              className="w-4 h-4 md:w-5 md:h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-              />
-            </svg>
-          </button>
-
-          <div className="bg-gray-800 p-2 md:p-3 rounded-lg text-xs md:text-sm border border-gray-700 shadow-lg text-white">
-            {Math.round(transform.scale * 100)}%
-          </div>
-        </div>
-
-        {/* Map Image - Scaled container */}
-        <div
-          style={{
-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-            transformOrigin: "0 0",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: MAP_IMAGE_SIZE,
-            height: MAP_IMAGE_SIZE
-          }}
-        >
-          <img
-            ref={mapRef}
-            src={MAP_STYLES[mapStyle]}
-            alt="Map"
-            draggable={false}
-            className="select-none pointer-events-none"
+          {/* Map Image - Scaled container */}
+          <div
             style={{
+              transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+              transformOrigin: "0 0",
+              position: "absolute",
+              top: 0,
+              left: 0,
               width: MAP_IMAGE_SIZE,
-              height: MAP_IMAGE_SIZE,
-              display: "block"
+              height: MAP_IMAGE_SIZE
             }}
-            onLoad={() => centerMap()}
-            onError={(e) => (e.target.src = MAP_STYLES["normal-locations"])}
-          />
-        </div>
+          >
+            <img
+              ref={mapRef}
+              src={MAP_STYLES[mapStyle]}
+              alt="Map"
+              draggable={false}
+              className="select-none pointer-events-none"
+              style={{
+                width: MAP_IMAGE_SIZE,
+                height: MAP_IMAGE_SIZE,
+                display: "block"
+              }}
+              onLoad={() => centerMap()}
+              onError={(e) => (e.target.src = MAP_STYLES["normal-locations"])}
+            />
+          </div>
 
-        {/* Markers - Separate container, not scaled */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none"
-          }}
-        >
-          {Object.values(markers).map((m) => {
-            const screenX = m.x * transform.scale + transform.x;
-            const screenY = m.y * transform.scale + transform.y;
-            const baseSize = 15;
-            const scaleFactor = 0.3 / transform.scale;
-            const scaledSize = Math.max(
-              12,
-              Math.min(20, baseSize * Math.min(scaleFactor, 2))
-            );
+          {/* Markers - Separate container, not scaled */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none"
+            }}
+          >
+            {Object.values(markers).map((m) => {
+              const screenX = m.x * transform.scale + transform.x;
+              const screenY = m.y * transform.scale + transform.y;
+              const baseSize = 15;
+              const scaleFactor = 0.3 / transform.scale;
+              const scaledSize = Math.max(
+                12,
+                Math.min(20, baseSize * Math.min(scaleFactor, 2))
+              );
 
-            return (
-              <div
-                key={m.player.Player}
-                style={{
-                  position: "absolute",
-                  left: screenX,
-                  top: screenY,
-                  transform: "translate(-50%, -50%)",
-                  zIndex: selectedPlayer?.Player === m.player.Player ? 30 : 10,
-                  pointerEvents: "auto"
-                }}
-                onMouseEnter={() => {
-                  if (nameDisplay === "hover") {
-                    setSelectedPlayer(m.player);
-                  }
-                }}
-                onMouseLeave={() => {
-                  if (nameDisplay === "hover") {
-                    setSelectedPlayer(null);
-                  }
-                }}
-              >
-                {/* Username - Above the icon */}
-                {(nameDisplay === "always" ||
-                  selectedPlayer?.Player === m.player.Player) && (
+              return (
+                <div
+                  key={m.player.Player}
+                  style={{
+                    position: "absolute",
+                    left: screenX,
+                    top: screenY,
+                    transform: "translate(-50%, -50%)",
+                    zIndex:
+                      selectedPlayer?.Player === m.player.Player ? 30 : 10,
+                    pointerEvents: "auto"
+                  }}
+                  onMouseEnter={() => {
+                    if (nameDisplay === "hover") {
+                      setSelectedPlayer(m.player);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (nameDisplay === "hover") {
+                      setSelectedPlayer(null);
+                    }
+                  }}
+                >
+                  {/* Username - Above the icon */}
+                  {(nameDisplay === "always" ||
+                    selectedPlayer?.Player === m.player.Player) && (
+                    <div
+                      className="absolute whitespace-nowrap"
+                      style={{
+                        left: "50%",
+                        bottom: "100%",
+                        transform: "translateX(-50%)",
+                        marginBottom: "4px",
+                        zIndex: 40
+                      }}
+                    >
+                      <div className="bg-gray-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-white border border-gray-700 shadow-lg">
+                        {m.player.Player.split(":")[0]} ({m.player?.Callsign})
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Player Icon */}
                   <div
-                    className="absolute whitespace-nowrap"
+                    className={`rounded-full border-2 border-white cursor-pointer transition-all hover:brightness-110 ${getTeamColor(m.team)} ${
+                      selectedPlayer?.Player === m.player.Player
+                        ? "ring-2 ring-white"
+                        : ""
+                    }`}
                     style={{
-                      left: "50%",
-                      bottom: "100%",
-                      transform: "translateX(-50%)",
-                      marginBottom: "4px",
-                      zIndex: 40
+                      width: `${scaledSize}px`,
+                      height: `${scaledSize}px`,
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
                     }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePlayerPopup(m.player);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Player Popup */}
+          {selectedPlayer && (
+            <div className="absolute bottom-4 right-4 bg-gray-800 p-5 rounded-xl w-80 z-50 border border-gray-700 shadow-2xl">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-12 h-12 rounded-xl ${getTeamColor(selectedPlayer.Team)} flex items-center justify-center text-2xl shadow-lg`}
                   >
-                    <div className="bg-gray-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-white border border-gray-700 shadow-lg">
-                      {m.player.Player.split(":")[0]} ({m.player?.Callsign})
+                    👤
+                  </div>
+                  <div>
+                    <div className="font-bold text-lg">
+                      {selectedPlayer.Player.split(":")[0]}
+                    </div>
+                    <span className="text-xs text-gray-400">
+                      {selectedPlayer.Team}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedPlayer(null)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {selectedPlayer.Location && (
+                <div className="border-t border-gray-700 pt-3">
+                  <h3 className="text-sm text-gray-400 mb-2">Location</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-gray-900 rounded-lg p-2 text-center">
+                      <div className="text-xs text-gray-400">X</div>
+                      <div className="font-mono">
+                        {Math.round(selectedPlayer.Location.LocationX)}
+                      </div>
+                    </div>
+                    <div className="bg-gray-900 rounded-lg p-2 text-center">
+                      <div className="text-xs text-gray-400">Z</div>
+                      <div className="font-mono">
+                        {Math.round(selectedPlayer.Location.LocationZ)}
+                      </div>
                     </div>
                   </div>
-                )}
-
-                {/* Player Icon */}
-                <div
-                  className={`rounded-full border-2 border-white cursor-pointer transition-all hover:brightness-110 ${getTeamColor(m.team)} ${
-                    selectedPlayer?.Player === m.player.Player
-                      ? "ring-2 ring-white"
-                      : ""
-                  }`}
-                  style={{
-                    width: `${scaledSize}px`,
-                    height: `${scaledSize}px`,
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlayerPopup(m.player);
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Player Popup */}
-        {selectedPlayer && (
-          <div className="absolute bottom-4 right-4 bg-gray-800 p-5 rounded-xl w-80 z-50 border border-gray-700 shadow-2xl">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-12 h-12 rounded-xl ${getTeamColor(selectedPlayer.Team)} flex items-center justify-center text-2xl shadow-lg`}
-                >
-                  👤
                 </div>
-                <div>
-                  <div className="font-bold text-lg">
-                    {selectedPlayer.Player.split(":")[0]}
-                  </div>
-                  <span className="text-xs text-gray-400">
-                    {selectedPlayer.Team}
-                  </span>
-                </div>
-              </div>
+              )}
+
               <button
                 onClick={() => setSelectedPlayer(null)}
-                className="text-gray-400 hover:text-white"
+                className="mt-4 w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-sm transition-colors"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                Close
               </button>
             </div>
+          )}
+        </div>
 
-            {selectedPlayer.Location && (
-              <div className="border-t border-gray-700 pt-3">
-                <h3 className="text-sm text-gray-400 mb-2">Location</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-gray-900 rounded-lg p-2 text-center">
-                    <div className="text-xs text-gray-400">X</div>
-                    <div className="font-mono">
-                      {Math.round(selectedPlayer.Location.LocationX)}
-                    </div>
-                  </div>
-                  <div className="bg-gray-900 rounded-lg p-2 text-center">
-                    <div className="text-xs text-gray-400">Z</div>
-                    <div className="font-mono">
-                      {Math.round(selectedPlayer.Location.LocationZ)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+        <div className="hidden md:block fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 w-150">
+          <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
+          <div className="relative px-4 pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-400">
+                Server Capacity
+              </span>
+              <span
+                className={`text-xs font-bold ${
+                  serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.8
+                    ? "text-red-400"
+                    : serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.5
+                      ? "text-yellow-400"
+                      : "text-green-400"
+                }`}
+              >
+                {serverInfo?.CurrentPlayers || 0}/{serverInfo?.MaxPlayers || 0}{" "}
+                Players
+              </span>
+            </div>
 
-            <button
-              onClick={() => setSelectedPlayer(null)}
-              className="mt-4 w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-sm transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="hidden md:block fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 w-150">
-        <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
-        <div className="relative px-4 pt-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-400">
-              Server Capacity
-            </span>
-            <span
-              className={`text-xs font-bold ${
-                serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.8
-                  ? "text-red-400"
-                  : serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.5
-                    ? "text-yellow-400"
-                    : "text-green-400"
-              }`}
-            >
-              {serverInfo?.CurrentPlayers || 0}/{serverInfo?.MaxPlayers || 0}{" "}
-              Players
-            </span>
-          </div>
-
-          <div className="relative h-12">
-            <div className="absolute inset-0 left-0 right-0">
-              <div className="absolute inset-0 flex items-center justify-between px-0">
-                {[0, 10, 20, 30, 40].map((num, index) => (
-                  <div
-                    key={num}
-                    className="flex flex-col items-center"
-                    style={{
-                      position: "absolute",
-                      left: `${(num / 40) * 100}%`,
-                      transform: "translateX(-50%)"
-                    }}
-                  >
-                    <span className="text-[9px] text-white/40 mt-1">{num}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="absolute inset-0">
-                {[...Array(21)].map((_, i) => {
-                  const position = i * 5;
-                  return (
+            <div className="relative h-12">
+              <div className="absolute inset-0 left-0 right-0">
+                <div className="absolute inset-0 flex items-center justify-between px-0">
+                  {[0, 10, 20, 30, 40].map((num, index) => (
                     <div
-                      key={i}
-                      className="absolute top-0"
+                      key={num}
+                      className="flex flex-col items-center"
                       style={{
-                        left: `${position}%`,
+                        position: "absolute",
+                        left: `${(num / 40) * 100}%`,
                         transform: "translateX(-50%)"
                       }}
                     >
-                      <div
-                        className={`w-px ${i % 5 === 0 ? "h-4 bg-white/40" : "h-2.5 bg-white/20"}`}
-                      />
+                      <span className="text-[9px] text-white/40 mt-1">
+                        {num}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
 
-              <div
-                className="absolute bottom-0 left-0 h-2.5 rounded-full transition-all duration-500 z-10"
-                style={{
-                  width: `${Math.min(100, ((serverInfo?.CurrentPlayers || 0) / (serverInfo?.MaxPlayers || 1)) * 100)}%`,
-                  backgroundColor: (() => {
-                    const percent =
-                      (serverInfo?.CurrentPlayers || 0) /
-                      (serverInfo?.MaxPlayers || 1);
-                    if (percent > 0.8) return "#ef4444";
-                    if (percent > 0.5) return "#eab308";
-                    return "#22c55e";
-                  })(),
-                  bottom: "4px",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-                }}
-              />
+                <div className="absolute inset-0">
+                  {[...Array(21)].map((_, i) => {
+                    const position = i * 5;
+                    return (
+                      <div
+                        key={i}
+                        className="absolute top-0"
+                        style={{
+                          left: `${position}%`,
+                          transform: "translateX(-50%)"
+                        }}
+                      >
+                        <div
+                          className={`w-px ${i % 5 === 0 ? "h-4 bg-white/40" : "h-2.5 bg-white/20"}`}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div
+                  className="absolute bottom-0 left-0 h-2.5 rounded-full transition-all duration-500 z-10"
+                  style={{
+                    width: `${Math.min(100, ((serverInfo?.CurrentPlayers || 0) / (serverInfo?.MaxPlayers || 1)) * 100)}%`,
+                    backgroundColor: (() => {
+                      const percent =
+                        (serverInfo?.CurrentPlayers || 0) /
+                        (serverInfo?.MaxPlayers || 1);
+                      if (percent > 0.8) return "#ef4444";
+                      if (percent > 0.5) return "#eab308";
+                      return "#22c55e";
+                    })(),
+                    bottom: "4px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        mapStyle={mapStyle}
-        setMapStyle={setMapStyle}
-        nameDisplay={nameDisplay}
-        setNameDisplay={setNameDisplay}
-        MAP_STYLES={MAP_STYLES}
-      />
-    </div>
+        {/* Settings Modal */}
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          mapStyle={mapStyle}
+          setMapStyle={setMapStyle}
+          nameDisplay={nameDisplay}
+          setNameDisplay={setNameDisplay}
+          MAP_STYLES={MAP_STYLES}
+        />
+      </div>
+    </>
   );
 }
 
