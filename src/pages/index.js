@@ -318,24 +318,27 @@ export default function Home() {
     return "City of London ERLC Live Map";
   };
 
-  // Generate Open Graph image URL (you'll need to create an API endpoint for this)
+  const findPlayerByUsername = (username) => {
+    const entry = Object.entries(markers).find(
+      ([key]) => key.split(":")[0] === username
+    );
+
+    return entry ? entry[1] : null;
+  };
+
   const getOGImageUrl = () => {
     const { user } = router.query;
     const baseUrl = "https://map.col-erlc.ca";
-    const markerEntry = Object.entries(markers).find(([key, value]) =>
-      key.startsWith(user)
-    );
+    const playerMarker = findPlayerByUsername(user);
 
-    if (!markerEntry) {
+    if (!playerMarker) {
       return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=1500&y=1500`;
     }
 
-    const [fullKey, marker] = markerEntry;
-    const worldX = marker.player.Location?.LocationX || 1500;
-    const worldZ = marker.player.Location?.LocationZ || 1500;
+    const worldX = playerMarker.player.Location?.LocationX || 1500;
+    const worldZ = playerMarker.player.Location?.LocationZ || 1500;
 
-    const url = `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${worldX}&y=${worldZ}`;
-    return url;
+    return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${worldX}&y=${worldZ}`;
   };
 
   return (
