@@ -324,7 +324,7 @@ export default function Home() {
     const baseUrl = "https://map.col-erlc.ca";
 
     if (user) {
-      return `${baseUrl}/api/og?type=user&value=${encodeURIComponent(user)}`;
+      return `${baseUrl}/api/og?type=user&value=${encodeURIComponent(user)}&x=${markers[user]?.x || 1500}&y=${markers[user]?.y || 1500}`;
     }
     if (team) {
       return `${baseUrl}/api/og?type=team&value=${encodeURIComponent(team)}`;
@@ -670,13 +670,6 @@ export default function Home() {
             {Object.values(markers).map((m) => {
               const screenX = m.x * transform.scale + transform.x;
               const screenY = m.y * transform.scale + transform.y;
-              const baseSize = 15;
-              const scaleFactor = 0.3 / transform.scale;
-              const scaledSize = Math.max(
-                12,
-                Math.min(20, baseSize * Math.min(scaleFactor, 2))
-              );
-
               return (
                 <div
                   key={m.player.Player}
@@ -714,7 +707,8 @@ export default function Home() {
                       }}
                     >
                       <div className="bg-gray-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-white border border-gray-700 shadow-lg">
-                        {m.player.Player.split(":")[0]} ({m.player?.Callsign})
+                        {m.player.Player.split(":")[0]}{" "}
+                        {m.player?.Callsign && `(${m.player.Callsign})`}
                       </div>
                     </div>
                   )}
@@ -727,8 +721,8 @@ export default function Home() {
                         : ""
                     }`}
                     style={{
-                      width: `${scaledSize}px`,
-                      height: `${scaledSize}px`,
+                      width: `15px`,
+                      height: `15px`,
                       boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
                     }}
                     onClick={(e) => {

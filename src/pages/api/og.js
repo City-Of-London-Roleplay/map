@@ -8,221 +8,87 @@ export const config = {
 export default async function handler(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const type = searchParams.get("type") || "default";
-    const value = searchParams.get("value") || "";
+    const playerName = searchParams.get("player") || "";
+    const x = parseFloat(searchParams.get("x")) || 1500;
+    const y = parseFloat(searchParams.get("y")) || 1500;
 
-    // Fetch current server data with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const MAP_SIZE = 3121;
+    const PIN_SIZE = 40;
 
-    const [serverRes, playersRes] = await Promise.all([
-      fetch(`https://map.col-erlc.ca/api/server`, { signal: controller.signal })
-        .then((r) => r.json())
-        .catch(() => null),
-      fetch(`https://map.col-erlc.ca/api/players`, {
-        signal: controller.signal
-      })
-        .then((r) => r.json())
-        .catch(() => ({}))
-    ]);
-
-    clearTimeout(timeoutId);
-
-    // Find player if type is user
-    let playerInfo = null;
-    if (type === "user" && value && playersRes) {
-      const userLower = value.toLowerCase();
-      Object.values(playersRes).forEach((team) => {
-        if (Array.isArray(team)) {
-          team.forEach((player) => {
-            const playerName =
-              player.Player?.split(":")[0]?.toLowerCase() || "";
-            const playerId = player.Player?.split(":")[1] || "";
-            if (playerName.includes(userLower) || playerId === value) {
-              playerInfo = player;
-            }
-          });
-        }
-      });
-    }
-
-    // Get team color
-    const getTeamColor = (team) => {
-      switch (team?.toLowerCase()) {
-        case "police":
-          return "#3B82F6"; // blue-500
-        case "sheriff":
-          return "#16A34A"; // green-600
-        case "fire":
-          return "#DC2626"; // red-600
-        case "dot":
-          return "#F97316"; // orange-500
-        default:
-          return "#6B7280"; // gray-500
-      }
-    };
+    // Calculate pin position (center of map)
+    const pinX = (x / 3121) * MAP_SIZE;
+    const pinY = (y / 3121) * MAP_SIZE;
 
     return new ImageResponse(
       <div
         style={{
           height: "100%",
           width: "100%",
-          display: "flex", // ✅ Required
-          flexDirection: "column", // ✅ Required
-          alignItems: "center", // ✅ Required
-          justifyContent: "center", // ✅ Required
-          backgroundColor: "#111827",
-          backgroundImage:
-            "radial-gradient(circle at 25px 25px, #374151 2px, transparent 2px), radial-gradient(circle at 75px 75px, #374151 2px, transparent 2px)",
-          backgroundSize: "100px 100px"
+          display: "flex",
+          position: "relative",
+          backgroundColor: "#1a1a1a"
         }}
       >
+        {/* Map Background */}
+        <img
+          src="https://map.col-erlc.ca/erlc-map.png"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover"
+          }}
+        />
+
+        {/* Single Player Pin */}
         <div
           style={{
-            display: "flex", // ✅ Add this
-            flexDirection: "column", // ✅ Add this
-            alignItems: "center", // ✅ Add this
-            justifyContent: "center", // ✅ Add this
-            backgroundColor: "rgba(17, 24, 39, 0.95)",
-            padding: "40px 60px",
-            borderRadius: "24px",
-            border: "2px solid #374151",
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)"
+            position: "absolute",
+            left: `${(pinX / MAP_SIZE) * 100}%`,
+            top: `${(pinY / MAP_SIZE) * 100}%`,
+            transform: "translate(-50%, -50%)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center"
           }}
         >
+          {/* Pin Dot */}
           <div
             style={{
-              display: "flex", // ✅ Add this
-              gap: "8px",
-              fontSize: 48,
-              fontWeight: "bold",
-              color: "#FFFFFF",
-              marginBottom: 8
+              width: PIN_SIZE,
+              height: PIN_SIZE,
+              backgroundColor: "#3B82F6",
+              borderRadius: "50%",
+              border: "3px solid white",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
           >
-            <span style={{ color: "#22C55E" }}>City</span>
-            <span style={{ color: "#3B82F6" }}>Of</span>
-            <span style={{ color: "#9CA3AF" }}>London</span>
+            <span style={{ fontSize: 20 }}>📍</span>
           </div>
 
-          {type === "user" && playerInfo && (
-            <>
-              <div style={{ fontSize: 32, color: "#9CA3AF", marginBottom: 24 }}>
-                Tracking Player
-              </div>
-              <div
-                style={{
-                  display: "flex", // ✅ Add this
-                  alignItems: "center", // ✅ Add this
-                  gap: 20,
-                  marginBottom: 16
-                }}
-              >
-                <div
-                  style={{
-                    width: 80,
-                    height: 80,
-                    borderRadius: 40,
-                    backgroundColor: getTeamColor(playerInfo.Team),
-                    display: "flex", // ✅ Add this
-                    alignItems: "center", // ✅ Add this
-                    justifyContent: "center", // ✅ Add this
-                    fontSize: 40
-                  }}
-                >
-                  👤
-                </div>
-                <div
-                  style={{
-                    display: "flex", // ✅ Add this
-                    flexDirection: "column" // ✅ Add this
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 36,
-                      fontWeight: "bold",
-                      color: "#FFFFFF"
-                    }}
-                  >
-                    {playerInfo.Player?.split(":")[0] || "Unknown"}
-                  </div>
-                  <div style={{ fontSize: 24, color: "#9CA3AF" }}>
-                    {playerInfo.Team || "Unknown"} •{" "}
-                    {playerInfo.Callsign || "No Callsign"}
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {type === "team" && value && (
-            <>
-              <div style={{ fontSize: 32, color: "#9CA3AF", marginBottom: 24 }}>
-                Tracking Team
-              </div>
-              <div
-                style={{
-                  display: "flex", // ✅ Add this
-                  alignItems: "center", // ✅ Add this
-                  gap: 20,
-                  marginBottom: 16
-                }}
-              >
-                <div
-                  style={{
-                    width: 80,
-                    height: 80,
-                    borderRadius: 40,
-                    backgroundColor: getTeamColor(value),
-                    display: "flex", // ✅ Add this
-                    alignItems: "center", // ✅ Add this
-                    justifyContent: "center", // ✅ Add this
-                    fontSize: 40
-                  }}
-                >
-                  👥
-                </div>
-                <div
-                  style={{ fontSize: 36, fontWeight: "bold", color: "#FFFFFF" }}
-                >
-                  {value} Team
-                </div>
-              </div>
-            </>
-          )}
-
-          {type === "default" && (
-            <>
-              <div style={{ fontSize: 32, color: "#9CA3AF", marginBottom: 24 }}>
-                Live Server Map
-              </div>
-              <div style={{ fontSize: 24, color: "#FFFFFF" }}>
-                {serverRes?.CurrentPlayers || 0} / {serverRes?.MaxPlayers || 40}{" "}
-                Players
-              </div>
-            </>
-          )}
-
+          {/* Player Name */}
           <div
             style={{
-              display: "flex", // ✅ Add this
-              marginTop: 32,
-              gap: 48,
-              color: "#9CA3AF",
-              fontSize: 20
+              marginTop: 8,
+              padding: "4px 12px",
+              backgroundColor: "rgba(0,0,0,0.75)",
+              borderRadius: 20,
+              color: "white",
+              fontSize: 20,
+              fontWeight: "bold",
+              border: "1px solid rgba(255,255,255,0.2)",
+              backdropFilter: "blur(4px)"
             }}
           >
-            <div>👥 {serverRes?.CurrentPlayers || 0} Online</div>
-            <div>🚗 Active</div>
-            <div>📍 Live Tracking</div>
+            {playerName || "Player"}
           </div>
         </div>
       </div>,
       {
         width: 1200,
         height: 630
-        // Remove fonts array if still getting errors
       }
     );
   } catch (e) {
