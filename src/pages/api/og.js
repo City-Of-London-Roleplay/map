@@ -31,7 +31,7 @@ export default async function handler(req) {
       >
         {/* Map Background */}
         <img
-          src="https://map.col-erlc.ca/erlc-map.png"
+          src="https://map.col-erlc.ca/normal-locations.png"
           style={{
             width: "100%",
             height: "100%",
