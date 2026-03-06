@@ -44,6 +44,20 @@ export default function Home() {
   const MAP_SIZE = 3121;
   const MAP_IMAGE_SIZE = 3121;
 
+  const focusOnPlayer = useCallback(
+    (playerKey) => {
+      const marker = markers[playerKey];
+      if (!marker || !containerRef.current) return;
+      const container = containerRef.current.getBoundingClientRect();
+      setTransform({
+        scale: 2,
+        x: container.width / 2 - marker.x * 2,
+        y: container.height / 2 - marker.y * 2
+      });
+    },
+    [markers]
+  );
+
   // Process URL parameters
   useEffect(() => {
     if (!urlProcessed && Object.keys(players).length > 0 && router.isReady) {
@@ -268,20 +282,6 @@ export default function Home() {
         return "bg-gray-500";
     }
   };
-
-  const focusOnPlayer = useCallback(
-    (playerKey) => {
-      const marker = markers[playerKey];
-      if (!marker || !containerRef.current) return;
-      const container = containerRef.current.getBoundingClientRect();
-      setTransform({
-        scale: 2,
-        x: container.width / 2 - marker.x * 2,
-        y: container.height / 2 - marker.y * 2
-      });
-    },
-    [markers]
-  );
 
   const togglePlayerPopup = (player) => {
     if (selectedPlayer?.Player === player.Player) {
