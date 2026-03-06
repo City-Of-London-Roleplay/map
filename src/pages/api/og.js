@@ -8,6 +8,7 @@ export const config = {
 export default async function handler(req) {
   try {
     const { searchParams } = new URL(req.url);
+    console.log(searchParams.toString());
     const playerName = searchParams.get("player") || "";
     const x = parseFloat(searchParams.get("x")) || 1500;
     const y = parseFloat(searchParams.get("y")) || 1500;

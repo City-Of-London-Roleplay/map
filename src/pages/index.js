@@ -321,12 +321,24 @@ export default function Home() {
   // Generate Open Graph image URL (you'll need to create an API endpoint for this)
   const getOGImageUrl = () => {
     const { user } = router.query;
-    const baseUrl = "https://map.col-erlc.ca";
+    const baseUrl = "http://localhost:3003"; //"https://map.col-erlc.ca";
+    const markerEntry = Object.entries(markers).find(([key, value]) =>
+      key.startsWith(user)
+    );
 
-    if (user) {
-      return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${markers[user]?.x || 1500}&y=${markers[user]?.y || 1500}`;
+    if (!markerEntry) {
+      console.log("Player not found:", user);
+      return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=1500&y=1500`;
     }
-    return `${baseUrl}/api/og?type=default`;
+
+    const [fullKey, marker] = markerEntry;
+    const worldX = marker.player.Location?.LocationX || 1500;
+    const worldZ = marker.player.Location?.LocationZ || 1500;
+
+    const url = `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${worldX}&y=${worldZ}`;
+    console.log("OG Image URL:", url);
+
+    return url;
   };
 
   return (
