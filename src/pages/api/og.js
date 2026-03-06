@@ -15,10 +15,8 @@ export default async function handler(req) {
 
     const MAP_SIZE = 3121;
     const PIN_SIZE = 15;
-    const CROP_SIZE = 600; // 600px square crop
+    const CROP_SIZE = 500; // 500px square crop
 
-    // Calculate the crop area centered on the player
-    // We want to show a 600x600 area around the player
     const cropX = Math.max(
       0,
       Math.min(x - CROP_SIZE / 2, MAP_SIZE - CROP_SIZE)
@@ -50,8 +48,8 @@ export default async function handler(req) {
             position: "absolute",
             left: `-${cropX}px`,
             top: `-${cropY}px`,
-            width: `${MAP_SIZE}px`,
-            height: `${MAP_SIZE}px`,
+            width: `3121px`,
+            height: `3121px`,
             objectFit: "none"
           }}
         />
@@ -102,12 +100,12 @@ export default async function handler(req) {
           {/* Player Name */}
           <div
             style={{
-              marginTop: 12,
+              marginTop: 6,
               padding: "6px 16px",
               backgroundColor: "rgba(0,0,0,0.85)",
               borderRadius: 30,
               color: "white",
-              fontSize: 24,
+              fontSize: 12,
               fontWeight: "bold",
               border: "1px solid #3B82F6",
               backdropFilter: "blur(4px)",
@@ -133,8 +131,8 @@ export default async function handler(req) {
         />
       </div>,
       {
-        width: 600,
-        height: 600
+        width: CROP_SIZE,
+        height: CROP_SIZE
       }
     );
   } catch (e) {

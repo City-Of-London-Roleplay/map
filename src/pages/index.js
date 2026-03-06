@@ -308,12 +308,9 @@ export default function Home() {
 
   // Generate meta title based on URL params
   const getMetaTitle = () => {
-    const { user, team } = router.query;
+    const { user } = router.query;
     if (user) {
       return `City of London - Tracking ${user}`;
-    }
-    if (team) {
-      return `City of London - ${team} Team`;
     }
     return "City of London ERLC Live Map";
   };
@@ -790,13 +787,13 @@ export default function Home() {
                     <div className="bg-gray-900 rounded-lg p-2 text-center">
                       <div className="text-xs text-gray-400">X</div>
                       <div className="font-mono">
-                        {Math.round(selectedPlayer.Location.LocationX)}
+                        {selectedPlayer.Location.LocationX}
                       </div>
                     </div>
                     <div className="bg-gray-900 rounded-lg p-2 text-center">
                       <div className="text-xs text-gray-400">Z</div>
                       <div className="font-mono">
-                        {Math.round(selectedPlayer.Location.LocationZ)}
+                        {selectedPlayer.Location.LocationZ}
                       </div>
                     </div>
                   </div>
