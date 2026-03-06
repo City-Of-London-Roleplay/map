@@ -11,24 +11,38 @@ export default async function handler(req) {
     const type = searchParams.get("type") || "default";
     const value = searchParams.get("value") || "";
 
-    // Fetch current server data
+    // Fetch current server data with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
     const [serverRes, playersRes] = await Promise.all([
-      fetch(`https://map.col-erlc.ca/api/server`).then((r) => r.json()),
-      fetch(`https://map.col-erlc.ca/api/players`).then((r) => r.json())
+      fetch(`https://map.col-erlc.ca/api/server`, { signal: controller.signal })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`https://map.col-erlc.ca/api/players`, {
+        signal: controller.signal
+      })
+        .then((r) => r.json())
+        .catch(() => ({}))
     ]);
+
+    clearTimeout(timeoutId);
 
     // Find player if type is user
     let playerInfo = null;
-    if (type === "user") {
+    if (type === "user" && value && playersRes) {
       const userLower = value.toLowerCase();
       Object.values(playersRes).forEach((team) => {
-        team.forEach((player) => {
-          const playerName = player.Player.split(":")[0].toLowerCase();
-          const playerId = player.Player.split(":")[1];
-          if (playerName.includes(userLower) || playerId === value) {
-            playerInfo = player;
-          }
-        });
+        if (Array.isArray(team)) {
+          team.forEach((player) => {
+            const playerName =
+              player.Player?.split(":")[0]?.toLowerCase() || "";
+            const playerId = player.Player?.split(":")[1] || "";
+            if (playerName.includes(userLower) || playerId === value) {
+              playerInfo = player;
+            }
+          });
+        }
       });
     }
 
@@ -36,17 +50,19 @@ export default async function handler(req) {
     const getTeamColor = (team) => {
       switch (team?.toLowerCase()) {
         case "police":
-          return "#3B82F6";
+          return "#3B82F6"; // blue-500
         case "sheriff":
-          return "#16A34A";
+          return "#16A34A"; // green-600
         case "fire":
-          return "#DC2626";
+          return "#DC2626"; // red-600
+        case "ems":
+          return "#DC2626"; // red-600
         case "dot":
-          return "#F97316";
+          return "#F97316"; // orange-500
         case "jail":
-          return "#9333EA";
+          return "#9333EA"; // purple-600
         default:
-          return "#6B7280";
+          return "#6B7280"; // gray-500
       }
     };
 
@@ -84,10 +100,14 @@ export default async function handler(req) {
               fontSize: 48,
               fontWeight: "bold",
               color: "#FFFFFF",
-              marginBottom: 8
+              marginBottom: 8,
+              display: "flex",
+              gap: "8px"
             }}
           >
-            City of London
+            <span style={{ color: "#22C55E" }}>City</span>
+            <span style={{ color: "#3B82F6" }}>Of</span>
+            <span style={{ color: "#9CA3AF" }}>London</span>
           </div>
 
           {type === "user" && playerInfo && (
@@ -125,17 +145,24 @@ export default async function handler(req) {
                       color: "#FFFFFF"
                     }}
                   >
-                    {playerInfo.Player.split(":")[0]}
+                    {playerInfo.Player?.split(":")[0] || "Unknown"}
                   </div>
                   <div style={{ fontSize: 24, color: "#9CA3AF" }}>
-                    {playerInfo.Team} • {playerInfo.Callsign || "No Callsign"}
+                    {playerInfo.Team || "Unknown"} •{" "}
+                    {playerInfo.Callsign || "No Callsign"}
                   </div>
                 </div>
               </div>
+              {playerInfo.Location && (
+                <div style={{ fontSize: 20, color: "#6B7280", marginTop: 8 }}>
+                  Location: {Math.round(playerInfo.Location.LocationX)},{" "}
+                  {Math.round(playerInfo.Location.LocationZ)}
+                </div>
+              )}
             </>
           )}
 
-          {type === "team" && (
+          {type === "team" && value && (
             <>
               <div style={{ fontSize: 32, color: "#9CA3AF", marginBottom: 24 }}>
                 Tracking Team
@@ -168,6 +195,15 @@ export default async function handler(req) {
                   {value} Team
                 </div>
               </div>
+              <div style={{ fontSize: 20, color: "#6B7280" }}>
+                {Object.values(playersRes || {}).reduce((count, team) => {
+                  if (Array.isArray(team)) {
+                    return count + team.filter((p) => p.Team === value).length;
+                  }
+                  return count;
+                }, 0)}{" "}
+                members online
+              </div>
             </>
           )}
 
@@ -193,18 +229,37 @@ export default async function handler(req) {
             }}
           >
             <div>👥 {serverRes?.CurrentPlayers || 0} Online</div>
-            <div>🚗 Active</div>
+            <div>
+              🚗{" "}
+              {Object.values(playersRes || {}).reduce((sum, team) => {
+                if (Array.isArray(team)) {
+                  return sum + team.filter((p) => p.Location).length;
+                }
+                return sum;
+              }, 0)}{" "}
+              Active
+            </div>
             <div>📍 Live Tracking</div>
           </div>
         </div>
       </div>,
       {
         width: 1200,
-        height: 630
+        height: 630,
+        fonts: [
+          {
+            name: "Inter",
+            data: await fetch(
+              "https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+            ).then((res) => res.arrayBuffer()),
+            weight: 400,
+            style: "normal"
+          }
+        ]
       }
     );
   } catch (e) {
-    console.log(`${e.message}`);
+    console.log(`OG Image Error: ${e.message}`);
     return new Response(`Failed to generate the image`, {
       status: 500
     });
