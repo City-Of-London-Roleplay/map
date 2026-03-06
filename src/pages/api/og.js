@@ -244,18 +244,8 @@ export default async function handler(req) {
         </div>
       </div>,
       {
-        width: 1200,
-        height: 630,
-        fonts: [
-          {
-            name: "Inter",
-            data: await fetch(
-              "https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
-            ).then((res) => res.arrayBuffer()),
-            weight: 400,
-            style: "normal"
-          }
-        ]
+        width: 3121,
+        height: 3121
       }
     );
   } catch (e) {
