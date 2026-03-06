@@ -55,12 +55,8 @@ export default async function handler(req) {
           return "#16A34A"; // green-600
         case "fire":
           return "#DC2626"; // red-600
-        case "ems":
-          return "#DC2626"; // red-600
         case "dot":
           return "#F97316"; // orange-500
-        case "jail":
-          return "#9333EA"; // purple-600
         default:
           return "#6B7280"; // gray-500
       }
@@ -71,23 +67,22 @@ export default async function handler(req) {
         style={{
           height: "100%",
           width: "100%",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
+          display: "flex", // ✅ Required
+          flexDirection: "column", // ✅ Required
+          alignItems: "center", // ✅ Required
+          justifyContent: "center", // ✅ Required
           backgroundColor: "#111827",
           backgroundImage:
             "radial-gradient(circle at 25px 25px, #374151 2px, transparent 2px), radial-gradient(circle at 75px 75px, #374151 2px, transparent 2px)",
-          backgroundSize: "100px 100px",
-          fontFamily: "Inter"
+          backgroundSize: "100px 100px"
         }}
       >
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
+            display: "flex", // ✅ Add this
+            flexDirection: "column", // ✅ Add this
+            alignItems: "center", // ✅ Add this
+            justifyContent: "center", // ✅ Add this
             backgroundColor: "rgba(17, 24, 39, 0.95)",
             padding: "40px 60px",
             borderRadius: "24px",
@@ -97,12 +92,12 @@ export default async function handler(req) {
         >
           <div
             style={{
+              display: "flex", // ✅ Add this
+              gap: "8px",
               fontSize: 48,
               fontWeight: "bold",
               color: "#FFFFFF",
-              marginBottom: 8,
-              display: "flex",
-              gap: "8px"
+              marginBottom: 8
             }}
           >
             <span style={{ color: "#22C55E" }}>City</span>
@@ -117,8 +112,8 @@ export default async function handler(req) {
               </div>
               <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
+                  display: "flex", // ✅ Add this
+                  alignItems: "center", // ✅ Add this
                   gap: 20,
                   marginBottom: 16
                 }}
@@ -129,15 +124,20 @@ export default async function handler(req) {
                     height: 80,
                     borderRadius: 40,
                     backgroundColor: getTeamColor(playerInfo.Team),
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display: "flex", // ✅ Add this
+                    alignItems: "center", // ✅ Add this
+                    justifyContent: "center", // ✅ Add this
                     fontSize: 40
                   }}
                 >
                   👤
                 </div>
-                <div style={{ display: "flex", flexDirection: "column" }}>
+                <div
+                  style={{
+                    display: "flex", // ✅ Add this
+                    flexDirection: "column" // ✅ Add this
+                  }}
+                >
                   <div
                     style={{
                       fontSize: 36,
@@ -153,12 +153,6 @@ export default async function handler(req) {
                   </div>
                 </div>
               </div>
-              {playerInfo.Location && (
-                <div style={{ fontSize: 20, color: "#6B7280", marginTop: 8 }}>
-                  Location: {Math.round(playerInfo.Location.LocationX)},{" "}
-                  {Math.round(playerInfo.Location.LocationZ)}
-                </div>
-              )}
             </>
           )}
 
@@ -169,8 +163,8 @@ export default async function handler(req) {
               </div>
               <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
+                  display: "flex", // ✅ Add this
+                  alignItems: "center", // ✅ Add this
                   gap: 20,
                   marginBottom: 16
                 }}
@@ -181,9 +175,9 @@ export default async function handler(req) {
                     height: 80,
                     borderRadius: 40,
                     backgroundColor: getTeamColor(value),
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display: "flex", // ✅ Add this
+                    alignItems: "center", // ✅ Add this
+                    justifyContent: "center", // ✅ Add this
                     fontSize: 40
                   }}
                 >
@@ -194,15 +188,6 @@ export default async function handler(req) {
                 >
                   {value} Team
                 </div>
-              </div>
-              <div style={{ fontSize: 20, color: "#6B7280" }}>
-                {Object.values(playersRes || {}).reduce((count, team) => {
-                  if (Array.isArray(team)) {
-                    return count + team.filter((p) => p.Team === value).length;
-                  }
-                  return count;
-                }, 0)}{" "}
-                members online
               </div>
             </>
           )}
@@ -221,7 +206,7 @@ export default async function handler(req) {
 
           <div
             style={{
-              display: "flex",
+              display: "flex", // ✅ Add this
               marginTop: 32,
               gap: 48,
               color: "#9CA3AF",
@@ -229,23 +214,15 @@ export default async function handler(req) {
             }}
           >
             <div>👥 {serverRes?.CurrentPlayers || 0} Online</div>
-            <div>
-              🚗{" "}
-              {Object.values(playersRes || {}).reduce((sum, team) => {
-                if (Array.isArray(team)) {
-                  return sum + team.filter((p) => p.Location).length;
-                }
-                return sum;
-              }, 0)}{" "}
-              Active
-            </div>
+            <div>🚗 Active</div>
             <div>📍 Live Tracking</div>
           </div>
         </div>
       </div>,
       {
-        width: 3121,
-        height: 3121
+        width: 1200,
+        height: 630
+        // Remove fonts array if still getting errors
       }
     );
   } catch (e) {
