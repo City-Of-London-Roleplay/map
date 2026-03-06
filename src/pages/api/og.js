@@ -64,9 +64,7 @@ export default async function handler(req) {
               alignItems: "center",
               justifyContent: "center"
             }}
-          >
-            <span style={{ fontSize: 20 }}>📍</span>
-          </div>
+          ></div>
 
           {/* Player Name */}
           <div

@@ -320,14 +320,11 @@ export default function Home() {
 
   // Generate Open Graph image URL (you'll need to create an API endpoint for this)
   const getOGImageUrl = () => {
-    const { user, team } = router.query;
+    const { user } = router.query;
     const baseUrl = "https://map.col-erlc.ca";
 
     if (user) {
-      return `${baseUrl}/api/og?type=user&value=${encodeURIComponent(user)}&x=${markers[user]?.x || 1500}&y=${markers[user]?.y || 1500}`;
-    }
-    if (team) {
-      return `${baseUrl}/api/og?type=team&value=${encodeURIComponent(team)}`;
+      return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${markers[user]?.x || 1500}&y=${markers[user]?.y || 1500}`;
     }
     return `${baseUrl}/api/og?type=default`;
   };
