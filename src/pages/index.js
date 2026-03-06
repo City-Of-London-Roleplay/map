@@ -335,6 +335,10 @@ export default function Home() {
     const worldX = playerMarker.player.Location?.LocationX || 1500;
     const worldZ = playerMarker.player.Location?.LocationZ || 1500;
 
+    console.log(
+      `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${worldX}&y=${worldZ}`
+    );
+
     return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${worldX}&y=${worldZ}`;
   };
 
