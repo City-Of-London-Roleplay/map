@@ -10,6 +10,7 @@ export default async function handler(req) {
     // 1. Get username from query string (e.g., "JohnDoe.png")
     const { searchParams } = new URL(req.url);
     let username = searchParams.get("user") || "";
+    let size = searchParams.get("size") || 500;
 
     // Remove the '.png' extension if present
     username = username.replace(/\.png$/i, "");
@@ -53,7 +54,7 @@ export default async function handler(req) {
     // 4. Generate the 1000x1000 image using the coordinates
     const MAP_SIZE = 3121;
     const PIN_SIZE = 20;
-    const CROP_SIZE = 500;
+    const CROP_SIZE = size;
 
     // Calculate crop area centered on the player
     const cropX = Math.max(
@@ -98,8 +99,7 @@ export default async function handler(req) {
             transform: "translate(-50%, -50%)",
             display: "flex",
             flexDirection: "column",
-            alignItems: "center",
-            zIndex: 10
+            alignItems: "center"
           }}
         >
           <div

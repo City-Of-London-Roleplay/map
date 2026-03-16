@@ -400,12 +400,12 @@ export default function Home() {
   };
 
   const getOGImageUrl = () => {
-    const { user } = router.query;
+    const { user, size } = router.query;
     const baseUrl = "https://map.col-erlc.ca";
     const playerMarker = findPlayerByUsername(user);
 
     if (!playerMarker) {
-      return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=1500&y=1500`;
+      return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=1500&y=1500&size=${size}`;
     }
 
     const worldX = playerMarker.player.Location?.LocationX || 1500;
@@ -914,7 +914,7 @@ export default function Home() {
                       {selectedPlayer.Player.split(":")[0]}
                     </div>
                     <span className="text-xs text-gray-400">
-                      {selectedPlayer.Team}
+                      {selectedPlayer.Team} {selectedPlayer.Callsign}
                     </span>
                   </div>
                 </div>

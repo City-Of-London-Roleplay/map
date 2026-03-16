@@ -8,137 +8,122 @@ export const config = {
 export default async function handler(req) {
   try {
     const { searchParams } = new URL(req.url);
-    console.log(searchParams.toString());
-    const playerName = searchParams.get("player") || "";
+    const playerName =
+      searchParams.get("user")?.replace(".png", "") || "Player";
     const x = parseFloat(searchParams.get("x")) || 1500;
     const y = parseFloat(searchParams.get("y")) || 1500;
 
+    // FORCE size as number
+    let size = Number(searchParams.get("size"));
+    if (isNaN(size) || size < 100) size = 500;
+    if (size > 1200) size = 1200;
+
     const MAP_SIZE = 3121;
-    const PIN_SIZE = 15;
-    const CROP_SIZE = 250; // 500px square crop
+    const VIEW_SIZE = 500;
 
-    const cropX = Math.max(
-      0,
-      Math.min(x - CROP_SIZE / 2, MAP_SIZE - CROP_SIZE)
-    );
-    const cropY = Math.max(
-      0,
-      Math.min(y - CROP_SIZE / 2, MAP_SIZE - CROP_SIZE)
-    );
+    // Calculate crop
+    let cropX = Math.max(0, Math.min(x - VIEW_SIZE / 2, MAP_SIZE - VIEW_SIZE));
+    let cropY = Math.max(0, Math.min(y - VIEW_SIZE / 2, MAP_SIZE - VIEW_SIZE));
 
-    // Calculate pin position within the cropped area
-    const pinX = x - cropX;
-    const pinY = y - cropY;
+    // Pin position
+    const pinX = Math.round(x - cropX);
+    const pinY = Math.round(y - cropY);
+
+    console.log(
+      `Generating ${size}x${size} image for ${playerName} at ${x},${y}`
+    );
 
     return new ImageResponse(
       <div
         style={{
-          height: "100%",
-          width: "100%",
           display: "flex",
           position: "relative",
-          backgroundColor: "#1a1a1a",
-          overflow: "hidden"
+          width: "100%",
+          height: "100%",
+          backgroundColor: "#1a1a1a"
         }}
       >
-        {/* Map Background - Positioned to show crop area */}
+        {/* Map - using string concatenation for values */}
         <img
           src="https://map.col-erlc.ca/normal-locations.png"
           style={{
             position: "absolute",
-            left: `-${cropX}px`,
-            top: `-${cropY}px`,
-            width: `3121px`,
-            height: `3121px`,
-            objectFit: "none"
+            left: "-" + cropX + "px",
+            top: "-" + cropY + "px",
+            width: MAP_SIZE + "px",
+            height: MAP_SIZE + "px",
+            display: "block"
           }}
         />
 
-        {/* Semi-transparent overlay for better pin visibility */}
+        {/* Semi-transparent overlay - NO zIndex */}
         <div
           style={{
             position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            top: "0px",
+            left: "0px",
+            right: "0px",
+            bottom: "0px",
             background:
-              "radial-gradient(circle at 50% 50%, transparent 30%, rgba(0,0,0,0.2) 100%)",
-            pointerEvents: "none"
+              "radial-gradient(circle at 50% 50%, transparent 30%, rgba(0,0,0,0.2) 100%)"
           }}
         />
 
-        {/* Single Player Pin */}
+        {/* Pin container - NO zIndex */}
         <div
           style={{
             position: "absolute",
-            left: `${pinX}px`,
-            top: `${pinY}px`,
+            left: pinX + "px",
+            top: pinY + "px",
             transform: "translate(-50%, -50%)",
             display: "flex",
             flexDirection: "column",
-            alignItems: "center",
-            zIndex: 10
+            alignItems: "center"
           }}
         >
-          {/* Pin Dot with pulse effect */}
+          {/* Pin dot */}
           <div
             style={{
-              width: PIN_SIZE,
-              height: PIN_SIZE,
+              width: "20px",
+              height: "20px",
               backgroundColor: "#3B82F6",
               borderRadius: "50%",
-              border: "3px solid white",
-              boxShadow:
-                "0 4px 12px rgba(0,0,0,0.5), 0 0 0 4px rgba(59,130,246,0.3)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
+              border: "3px solid #ffffff",
+              boxShadow: "0 0 0 3px rgba(59,130,246,0.5)"
             }}
           />
 
-          {/* Player Name */}
+          {/* Player name */}
           <div
             style={{
-              marginTop: 6,
+              marginTop: "8px",
               padding: "6px 16px",
-              backgroundColor: "rgba(0,0,0,0.85)",
-              borderRadius: 30,
-              color: "white",
-              fontSize: 12,
+              backgroundColor: "#000000",
+              color: "#ffffff",
+              fontSize: "14px",
               fontWeight: "bold",
+              borderRadius: "20px",
               border: "1px solid #3B82F6",
-              backdropFilter: "blur(4px)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+              whiteSpace: "nowrap"
             }}
           >
-            {playerName || "Player"}
+            {playerName}
           </div>
         </div>
-
-        {/* Optional: Subtle border to show crop area */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            border: "2px solid rgba(255,255,255,0.1)",
-            borderRadius: 8,
-            pointerEvents: "none"
-          }}
-        />
       </div>,
       {
-        width: CROP_SIZE,
-        height: CROP_SIZE
+        width: size,
+        height: size,
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0"
+        }
       }
     );
   } catch (e) {
-    console.log(`OG Image Error: ${e.message}`);
-    return new Response(`Failed to generate the image`, {
-      status: 500
-    });
+    console.error("OG Error:", e);
+    return new Response(e.message, { status: 500 });
   }
 }
