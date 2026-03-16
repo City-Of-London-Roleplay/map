@@ -21,6 +21,10 @@ export default function Home() {
   const [mapStyle, setMapStyle] = useState("normal-locations");
   const [nameDisplay, setNameDisplay] = useState("hover");
   const [urlProcessed, setUrlProcessed] = useState(false);
+  const [avatarUrls, setAvatarUrls] = useState({});
+  const [avatarsLoaded, setAvatarsLoaded] = useState(false);
+  const [isUpdatingUrl, setIsUpdatingUrl] = useState(false);
+  const [hoveredPlayer, setHoveredPlayer] = useState(null);
 
   const MAP_STYLES = {
     normal: "https://map.col-erlc.ca/normal.png",
@@ -44,6 +48,73 @@ export default function Home() {
   const MAP_SIZE = 3121;
   const MAP_IMAGE_SIZE = 3121;
 
+  // Fetch avatar for a player
+  const fetchPlayerAvatar = async (player) => {
+    try {
+      const res = await fetch(
+        `/api/roblox/user?userId=${player.Player.split(":")[1]}`
+      );
+      const url = await res.json();
+      return url;
+    } catch (err) {
+      console.error("Failed to fetch avatar:", err);
+      return "https://cdn.col-erlc.ca/images/69221fda-64a4-4169-91fd-295506c6712a.png";
+    }
+  };
+
+  useEffect(() => {
+    const fetchAllAvatars = async () => {
+      if (!players || Object.keys(players).length === 0 || avatarsLoaded)
+        return;
+
+      const urls = {};
+      const promises = [];
+
+      Object.values(players).forEach((team) => {
+        team.forEach((player) => {
+          const playerId = player.Player.split(":")[1];
+          const promise = fetch(`/api/roblox/user?userId=${playerId}`)
+            .then((res) => res.json())
+            .then((url) => {
+              urls[player.Player] = url;
+            })
+            .catch((err) => {
+              console.error("Failed to fetch avatar:", err);
+              urls[player.Player] =
+                "https://cdn.col-erlc.ca/images/69221fda-64a4-4169-91fd-295506c6712a.png";
+            });
+          promises.push(promise);
+        });
+      });
+
+      await Promise.all(promises);
+      setAvatarUrls(urls);
+      setAvatarsLoaded(true);
+    };
+
+    fetchAllAvatars();
+  }, [players, avatarsLoaded]);
+
+  // Fetch all avatars when markers change
+  useEffect(() => {
+    const fetchAllAvatars = async () => {
+      const urls = {};
+      for (const marker of Object.values(markers)) {
+        try {
+          const url = await fetchPlayerAvatar(marker.player);
+          urls[marker.player.Player] = url;
+        } catch (err) {
+          console.error("Failed to fetch avatar:", err);
+        }
+      }
+      setAvatarUrls(urls);
+    };
+
+    if (Object.keys(markers).length > 0) {
+      fetchAllAvatars();
+    }
+  }, [markers]);
+
   const focusOnPlayer = useCallback(
     (playerKey) => {
       const marker = markers[playerKey];
@@ -64,7 +135,6 @@ export default function Home() {
       const { user, team } = router.query;
 
       if (user) {
-        // Find user by name or ID
         const userLower = user.toLowerCase();
         let foundPlayer = null;
 
@@ -86,7 +156,6 @@ export default function Home() {
       }
 
       if (team) {
-        // Find team and focus on first player in that team
         const teamLower = team.toLowerCase();
         let teamPlayers = [];
 
@@ -97,7 +166,6 @@ export default function Home() {
         });
 
         if (teamPlayers.length > 0) {
-          // Focus on the first player in the team
           setSelectedPlayer(teamPlayers[0]);
           setTimeout(() => focusOnPlayer(teamPlayers[0].Player), 500);
         }
@@ -106,6 +174,22 @@ export default function Home() {
       setUrlProcessed(true);
     }
   }, [players, router.isReady, router.query, urlProcessed, focusOnPlayer]);
+
+  useEffect(() => {
+    if (selectedPlayer && !isUpdatingUrl && router.isReady) {
+      const username = selectedPlayer.Player.split(":")[0];
+      const url = new URL(window.location.href);
+      url.searchParams.set("user", username);
+
+      // Update URL without reloading the page
+      window.history.pushState({}, "", url.toString());
+    } else if (!selectedPlayer && !isUpdatingUrl && router.isReady) {
+      // Remove user param when no player selected
+      const url = new URL(window.location.href);
+      url.searchParams.delete("user");
+      window.history.pushState({}, "", url.toString());
+    }
+  }, [selectedPlayer, router.isReady]);
 
   const centerMap = useCallback(() => {
     if (!containerRef.current || !mapRef.current) return;
@@ -214,7 +298,6 @@ export default function Home() {
     isDragging.current = false;
   };
 
-  // Google Maps style zooming (towards mouse position)
   const handleWheel = (e) => {
     e.preventDefault();
 
@@ -222,15 +305,12 @@ export default function Home() {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Calculate mouse position relative to map before zoom
     const mapX = (mouseX - transform.x) / transform.scale;
     const mapY = (mouseY - transform.y) / transform.scale;
 
-    // Calculate new scale (Google Maps style - smoother)
     const delta = e.deltaY > 0 ? 0.95 : 1.05;
     const newScale = Math.min(Math.max(0.1, transform.scale * delta), 3);
 
-    // Adjust position to zoom towards mouse (Google Maps style)
     setTransform({
       scale: newScale,
       x: mouseX - mapX * newScale,
@@ -238,7 +318,6 @@ export default function Home() {
     });
   };
 
-  // Touch support for mobile (Google Maps style)
   const handleTouchStart = (e) => {
     if (e.touches.length === 1) {
       e.preventDefault();
@@ -294,7 +373,6 @@ export default function Home() {
 
   const resetView = () => centerMap();
 
-  // Generate meta description based on URL params
   const getMetaDescription = () => {
     const { user, team } = router.query;
     if (user) {
@@ -306,7 +384,6 @@ export default function Home() {
     return "Live map tracking for City of London ERLC server - Track players, vehicles, and staff in real-time";
   };
 
-  // Generate meta title based on URL params
   const getMetaTitle = () => {
     const { user } = router.query;
     if (user) {
@@ -319,7 +396,6 @@ export default function Home() {
     const entry = Object.entries(markers).find(
       ([key]) => key.split(":")[0] === username
     );
-
     return entry ? entry[1] : null;
   };
 
@@ -338,6 +414,24 @@ export default function Home() {
     return `${baseUrl}/api/og?player=${encodeURIComponent(user)}&x=${worldX}&y=${worldZ}`;
   };
 
+  const PlayerAvatar = ({ player }) => {
+    const avatarUrl =
+      avatarUrls[player.Player] ||
+      "https://cdn.col-erlc.ca/images/69221fda-64a4-4169-91fd-295506c6712a.png";
+
+    return (
+      <img
+        src={avatarUrl}
+        alt={player.Player.split(":")[0]}
+        className="w-5 h-5 rounded-full object-cover border border-gray-600"
+        onError={(e) => {
+          e.target.src =
+            "https://cdn.col-erlc.ca/images/69221fda-64a4-4169-91fd-295506c6712a.png";
+        }}
+      />
+    );
+  };
+
   return (
     <>
       <Head>
@@ -348,7 +442,6 @@ export default function Home() {
           type="image/x-icon"
           href="https://cdn.col-erlc.ca/images/69221fda-64a4-4169-91fd-295506c6712a.png"
         />
-        {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta
           property="og:url"
@@ -359,14 +452,10 @@ export default function Home() {
         <meta property="og:image" content={getOGImageUrl()} />
         <meta property="og:image:width" content="3121" />
         <meta property="og:image:height" content="3121" />
-
-        {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={getMetaTitle()} />
         <meta name="twitter:description" content={getMetaDescription()} />
         <meta name="twitter:image" content={getOGImageUrl()} />
-
-        {/* Additional meta tags for Discord */}
         <meta name="theme-color" content="#3B82F6" />
       </Head>
 
@@ -377,13 +466,15 @@ export default function Home() {
             onClick={() => setIsMobileMenuOpen(false)}
           />
         )}
+
+        {/* Mobile Sidebar */}
         <div
-          className={`fixed top-0 left-0 h-full w-80 z-50 transform transition-transform duration-300 ease-in-out md:hidden overflow-y-auto ${
+          className={`fixed top-0 left-0 h-full w-80 z-50 transform transition-transform duration-300 ease-in-out md:hidden overflow-y-auto flex flex-col ${
             isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
           <div className="absolute inset-0 bg-gray-900/90 backdrop-blur-md" />
-          <div className="relative p-4">
+          <div className="relative p-4 flex flex-col flex-1">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-white">Menu</h2>
               <button
@@ -405,7 +496,7 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1">
               <SidebarContent
                 serverInfo={serverInfo}
                 players={players}
@@ -421,13 +512,17 @@ export default function Home() {
                 getTeamColor={getTeamColor}
                 nameDisplay={nameDisplay}
                 setSelectedPlayer={setSelectedPlayer}
+                setHoveredPlayer={setHoveredPlayer}
+                PlayerAvatar={PlayerAvatar}
               />
             </div>
           </div>
         </div>
-        <div className="hidden md:block fixed top-4 left-4 w-96 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl">
+
+        {/* Desktop Sidebar */}
+        <div className="hidden md:block fixed top-4 left-4 w-96 z-40 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl flex-col">
           <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl" />
-          <div className="relative p-5">
+          <div className="relative p-5 flex flex-col flex-1">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-2xl font-bold text-white">
@@ -456,6 +551,8 @@ export default function Home() {
               getTeamColor={getTeamColor}
               nameDisplay={nameDisplay}
               setSelectedPlayer={setSelectedPlayer}
+              setHoveredPlayer={setHoveredPlayer}
+              PlayerAvatar={PlayerAvatar}
             />
           </div>
         </div>
@@ -463,7 +560,7 @@ export default function Home() {
         {/* Map Container */}
         <div
           ref={containerRef}
-          className="flex-1 relative overflow-hidden bg-gray-900"
+          className="flex-1 relative overflow-hidden bg-gray-900 hover:cursor-grab"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -472,6 +569,22 @@ export default function Home() {
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onClick={(e) => {
+            // Only deselect if clicking directly on the map container
+            // and not on a marker or popup
+            if (
+              e.target === containerRef.current ||
+              e.target === mapRef.current?.parentElement
+            ) {
+              setSelectedPlayer(null);
+              setHoveredPlayer(null);
+
+              // Remove user from URL
+              const url = new URL(window.location.href);
+              url.searchParams.delete("user");
+              window.history.pushState({}, "", url.toString());
+            }
+          }}
         >
           {/* Mobile Header */}
           <div className="absolute top-0 left-0 right-0 z-20 md:hidden bg-gray-900/90 backdrop-blur-md p-3 border-b border-white/10">
@@ -500,22 +613,21 @@ export default function Home() {
               </h1>
 
               <div className="flex items-center gap-1 shrink-0">
-                {/* Player count */}
                 <div className="bg-gray-800/80 px-2 py-1.5 rounded-lg border border-white/10 text-xs whitespace-nowrap">
                   <span
                     className={`
-            ${
-              serverInfo?.CurrentPlayers > 35
-                ? "text-red-500"
-                : serverInfo?.CurrentPlayers >= 30
-                  ? "text-orange-500"
-                  : serverInfo?.CurrentPlayers >= 10
-                    ? "text-yellow-500"
-                    : serverInfo?.CurrentPlayers === 0
-                      ? "text-red-500"
-                      : "text-green-500"
-            }
-          `}
+                      ${
+                        serverInfo?.CurrentPlayers > 35
+                          ? "text-red-500"
+                          : serverInfo?.CurrentPlayers >= 30
+                            ? "text-orange-500"
+                            : serverInfo?.CurrentPlayers >= 10
+                              ? "text-yellow-500"
+                              : serverInfo?.CurrentPlayers === 0
+                                ? "text-red-500"
+                                : "text-green-500"
+                      }
+                    `}
                   >
                     {serverInfo?.CurrentPlayers || 0}
                   </span>
@@ -579,7 +691,17 @@ export default function Home() {
           <div className="absolute top-4 right-4 z-10 flex gap-2">
             <div className="bg-gray-800 p-2 md:p-3 rounded-lg hover:bg-gray-700 border border-gray-700 shadow-lg">
               <span
-                className={`${serverInfo?.CurrentPlayers > 35 ? "text-red-500" : serverInfo?.CurrentPlayers >= 30 ? "text-orange-500" : serverInfo?.CurrentPlayers >= 10 ? "text-yellow-500" : serverInfo?.CurrentPlayers === 0 ? "text-red-500" : "text-green-500"}`}
+                className={`${
+                  serverInfo?.CurrentPlayers > 35
+                    ? "text-red-500"
+                    : serverInfo?.CurrentPlayers >= 30
+                      ? "text-orange-500"
+                      : serverInfo?.CurrentPlayers >= 10
+                        ? "text-yellow-500"
+                        : serverInfo?.CurrentPlayers === 0
+                          ? "text-red-500"
+                          : "text-green-500"
+                }`}
               >
                 {serverInfo?.CurrentPlayers}
               </span>
@@ -676,6 +798,11 @@ export default function Home() {
             {Object.values(markers).map((m) => {
               const screenX = m.x * transform.scale + transform.x;
               const screenY = m.y * transform.scale + transform.y;
+              const scaledSize = 25;
+
+              const isSelected = selectedPlayer?.Player === m.player.Player;
+              const isHovered = hoveredPlayer?.Player === m.player.Player;
+
               return (
                 <div
                   key={m.player.Player}
@@ -684,31 +811,38 @@ export default function Home() {
                     left: screenX,
                     top: screenY,
                     transform: "translate(-50%, -50%)",
-                    zIndex:
-                      selectedPlayer?.Player === m.player.Player ? 30 : 10,
-                    pointerEvents: "auto"
+                    zIndex: isSelected ? 30 : 10,
+                    pointerEvents: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center"
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePlayerPopup(m.player);
                   }}
                   onMouseEnter={() => {
                     if (nameDisplay === "hover") {
-                      setSelectedPlayer(m.player);
+                      setHoveredPlayer(m.player);
                     }
                   }}
                   onMouseLeave={() => {
                     if (nameDisplay === "hover") {
-                      setSelectedPlayer(null);
+                      setHoveredPlayer(null);
                     }
                   }}
                 >
                   {/* Username - Above the icon */}
-                  {(nameDisplay === "always" ||
-                    selectedPlayer?.Player === m.player.Player) && (
+                  {(nameDisplay === "always" || isSelected || isHovered) && (
                     <div
-                      className="absolute whitespace-nowrap"
                       style={{
-                        left: "50%",
+                        position: "absolute",
                         bottom: "100%",
+                        left: "50%",
                         transform: "translateX(-50%)",
                         marginBottom: "4px",
+                        whiteSpace: "nowrap",
+                        pointerEvents: "none",
                         zIndex: 40
                       }}
                     >
@@ -719,23 +853,39 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Player Icon */}
-                  <div
-                    className={`rounded-full border-2 border-white cursor-pointer transition-all hover:brightness-110 ${getTeamColor(m.team)} ${
-                      selectedPlayer?.Player === m.player.Player
-                        ? "ring-2 ring-white"
-                        : ""
-                    }`}
-                    style={{
-                      width: `15px`,
-                      height: `15px`,
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      togglePlayerPopup(m.player);
-                    }}
-                  />
+                  {avatarUrls[m.player.Player] ? (
+                    <img
+                      src={avatarUrls[m.player.Player]}
+                      alt={m.player.Player.split(":")[0]}
+                      className={`rounded-full border-2 border-green-900 bg-blue-900 cursor-pointer transition-all hover:brightness-110 object-cover ${
+                        isSelected ? "ring-2 border-green-600" : ""
+                      }`}
+                      style={{
+                        width: `${scaledSize}px`,
+                        height: `${scaledSize}px`,
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePlayerPopup(m.player);
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className={`rounded-full border-2 border-green-900 bg-blue-900 cursor-pointer transition-all hover:brightness-110 ${getTeamColor(m.team)} ${
+                        isSelected ? "ring-2 border-green-600" : ""
+                      }`}
+                      style={{
+                        width: `${scaledSize}px`,
+                        height: `${scaledSize}px`,
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePlayerPopup(m.player);
+                      }}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -743,14 +893,22 @@ export default function Home() {
 
           {/* Player Popup */}
           {selectedPlayer && (
-            <div className="absolute bottom-4 right-4 bg-gray-800 p-5 rounded-xl w-80 z-50 border border-gray-700 shadow-2xl">
+            <div className="absolute bottom-4 right-4 bg-gray-800 p-5 rounded-xl w-80 z-50 border border-gray-700 shadow-2xl flex flex-col">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-12 h-12 rounded-xl ${getTeamColor(selectedPlayer.Team)} flex items-center justify-center text-2xl shadow-lg`}
-                  >
-                    👤
-                  </div>
+                  {avatarUrls[selectedPlayer.Player] ? (
+                    <img
+                      src={avatarUrls[selectedPlayer.Player]}
+                      alt={selectedPlayer.Player.split(":")[0]}
+                      className="w-12 h-12 rounded-xl object-cover border-2 border-gray-600"
+                    />
+                  ) : (
+                    <div
+                      className={`w-12 h-12 rounded-xl ${getTeamColor(selectedPlayer.Team)} flex items-center justify-center text-2xl shadow-lg`}
+                    >
+                      👤
+                    </div>
+                  )}
                   <div>
                     <div className="font-bold text-lg">
                       {selectedPlayer.Player.split(":")[0]}
@@ -781,19 +939,19 @@ export default function Home() {
               </div>
 
               {selectedPlayer.Location && (
-                <div className="border-t border-gray-700 pt-3">
+                <div className="border-t border-gray-700 pt-3 flex flex-col">
                   <h3 className="text-sm text-gray-400 mb-2">Location</h3>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-gray-900 rounded-lg p-2 text-center">
                       <div className="text-xs text-gray-400">X</div>
                       <div className="font-mono">
-                        {selectedPlayer.Location.LocationX}
+                        {Math.round(selectedPlayer.Location.LocationX)}
                       </div>
                     </div>
                     <div className="bg-gray-900 rounded-lg p-2 text-center">
                       <div className="text-xs text-gray-400">Z</div>
                       <div className="font-mono">
-                        {selectedPlayer.Location.LocationZ}
+                        {Math.round(selectedPlayer.Location.LocationZ)}
                       </div>
                     </div>
                   </div>
@@ -839,7 +997,9 @@ const SidebarContent = ({
   togglePlayerPopup,
   getTeamColor,
   nameDisplay,
-  setSelectedPlayer
+  setHoveredPlayer,
+  setSelectedPlayer,
+  PlayerAvatar
 }) => {
   return (
     <div className="space-y-4">
@@ -861,6 +1021,8 @@ const SidebarContent = ({
             getTeamColor={getTeamColor}
             nameDisplay={nameDisplay}
             setSelectedPlayer={setSelectedPlayer}
+            setHoveredPlayer={setHoveredPlayer}
+            PlayerAvatar={PlayerAvatar}
           />
         </Dropdown>
       )}
@@ -929,7 +1091,11 @@ const ServerStatusContent = ({ serverInfo }) => (
         </span>
         <div className="w-16 h-1.5 bg-gray-600 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full ${serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.8 ? "bg-red-500" : "bg-green-500"}`}
+            className={`h-full rounded-full ${
+              serverInfo?.CurrentPlayers / serverInfo?.MaxPlayers > 0.8
+                ? "bg-red-500"
+                : "bg-green-500"
+            }`}
             style={{
               width: `${((serverInfo?.CurrentPlayers || 0) / (serverInfo?.MaxPlayers || 1)) * 100}%`
             }}
@@ -952,7 +1118,9 @@ const PlayersContent = ({
   togglePlayerPopup,
   getTeamColor,
   nameDisplay,
-  setSelectedPlayer
+  setHoveredPlayer,
+  setSelectedPlayer,
+  PlayerAvatar
 }) => (
   <div className="space-y-4">
     {Object.entries(players).map(([team, members]) => (
@@ -970,79 +1138,40 @@ const PlayersContent = ({
           {members.map((player) => (
             <div
               key={player.Player}
-              onClick={() => togglePlayerPopup(player)}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${selectedPlayer?.Player === player.Player ? "bg-gray-600" : "hover:bg-gray-600"}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayerPopup(player);
+                setSelectedPlayer(player);
+              }}
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                selectedPlayer?.Player === player.Player
+                  ? "bg-green-500/20"
+                  : "hover:bg-gray-600"
+              }`}
               onMouseEnter={() => {
                 if (nameDisplay === "hover") {
-                  setSelectedPlayer(player);
+                  setHoveredPlayer(player);
                 }
               }}
               onMouseLeave={() => {
                 if (nameDisplay === "hover") {
-                  setSelectedPlayer(null);
+                  setHoveredPlayer(null);
                 }
               }}
             >
-              <div className={`w-2 h-2 rounded-full ${getTeamColor(team)}`} />
+              <PlayerAvatar player={player} />
               <span className="flex-1 text-sm text-gray-200 truncate">
                 {player.Player.split(":")[0]}
               </span>
               {player.Location && (
                 <span className="text-xs text-gray-400">
-                  {player.Location?.BuildingNumber}{" "}
-                  {player.Location?.StreetName}, ({player.Location?.PostalCode})
+                  {player.Location.BuildingNumber} {player.Location.StreetName},{" "}
+                  {player.Location.PostalCode}
                 </span>
               )}
             </div>
           ))}
         </div>
-      </div>
-    ))}
-  </div>
-);
-
-const StaffContent = ({ staff }) => (
-  <div className="space-y-4">
-    {["Admins", "Mods", "Helpers"].map((role) => (
-      <div key={role}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-300">{role}</span>
-          <span className="text-xs bg-gray-600 px-2 py-0.5 rounded-full text-gray-300">
-            {staff[role] ? Object.keys(staff[role]).length : 0}
-          </span>
-        </div>
-        <div className="space-y-1">
-          {staff[role] &&
-            Object.values(staff[role]).map((name, i) => (
-              <div
-                key={i}
-                className="px-3 py-1.5 text-sm text-gray-300 bg-gray-600 rounded-lg"
-              >
-                {name}
-              </div>
-            ))}
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-const JoinLogsContent = ({ joinLogs }) => (
-  <div className="space-y-1">
-    {joinLogs.slice(0, 20).map((log, i) => (
-      <div
-        key={i}
-        className="flex items-center gap-2 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
-      >
-        <span
-          className={`w-1.5 h-1.5 rounded-full ${log.Join ? "bg-green-500" : "bg-red-500"}`}
-        />
-        <span className="text-blue-300">{log.Player?.split(":")[0]}</span>
-        <span className="text-gray-400">({log.Player?.split(":")[1]})</span>
-        <span className="text-gray-400">{log.Join ? "joined" : "left"}</span>
-        <span className="text-gray-500 ml-auto">
-          {new Date(log.Timestamp * 1000).toLocaleTimeString()}
-        </span>
       </div>
     ))}
   </div>
@@ -1062,66 +1191,6 @@ const QueueContent = ({ queue }) => (
   </div>
 );
 
-const KillLogsContent = ({ killLogs }) => (
-  <div className="space-y-1">
-    {killLogs.slice(0, 20).map((kill, i) => (
-      <div
-        key={i}
-        className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
-      >
-        <span className="text-red-300">
-          {kill.Killer?.split(":")[0] || "?"}
-        </span>
-        <span className="text-gray-400">→</span>
-        <span className="text-green-300">
-          {kill.Killed?.split(":")[0] || "?"}
-        </span>
-        <span className="text-gray-500 ml-auto">
-          {new Date(kill.Timestamp * 1000).toLocaleTimeString()}
-        </span>
-      </div>
-    ))}
-  </div>
-);
-
-const CommandLogsContent = ({ commandLogs }) => (
-  <div className="space-y-1">
-    {commandLogs.slice(0, 20).map((cmd, i) => (
-      <div
-        key={i}
-        className="px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
-      >
-        <span className="text-purple-300">{cmd.Player?.split(":")[0]}</span>
-        <span className="text-gray-400 ml-1">
-          ({cmd.Player?.split(":")[1]})
-        </span>
-        <span className="text-gray-300 ml-2">"{cmd.Command}"</span>
-        <span className="text-gray-500 float-right">
-          {new Date(cmd.Timestamp * 1000).toLocaleTimeString()}
-        </span>
-      </div>
-    ))}
-  </div>
-);
-
-const ModCallsContent = ({ modCalls }) => (
-  <div className="space-y-1">
-    {modCalls.slice(0, 20).map((call, i) => (
-      <div
-        key={i}
-        className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gray-600 rounded border border-gray-500"
-      >
-        <span className="text-yellow-300">{call.Caller?.split(":")[0]}</span>
-        <span className="text-gray-400">→</span>
-        <span className="text-purple-300">{call.Moderator?.split(":")[0]}</span>
-        <span className="text-gray-500 ml-auto">
-          {new Date(call.Timestamp * 1000).toLocaleTimeString()}
-        </span>
-      </div>
-    ))}
-  </div>
-);
-
 const VehiclesContent = ({ vehicles }) => (
   <div className="space-y-1">
     {vehicles.slice(0, 20).map((vehicle, i) => (
@@ -1129,12 +1198,10 @@ const VehiclesContent = ({ vehicles }) => (
         key={i}
         className="relative bg-gray-600 rounded border border-gray-500 overflow-hidden"
       >
-        {/* Color bar */}
         <div
           className="absolute left-0 top-0 bottom-0 w-1.5"
           style={{ backgroundColor: vehicle.ColorHex || "#888" }}
         />
-
         <div className="pl-4 p-2">
           <div className="flex items-center justify-between">
             <span className="text-cyan-300 text-xs">{vehicle.Name}</span>
@@ -1144,7 +1211,6 @@ const VehiclesContent = ({ vehicles }) => (
               </span>
             )}
           </div>
-
           <div className="flex items-center justify-between mt-1">
             <span className="text-gray-400 text-[10px]">{vehicle.Owner}</span>
             {vehicle.ColorName && (
@@ -1180,6 +1246,7 @@ const SettingsModal = ({
   const [mapBase, setMapBase] = useState(
     mapStyle.includes("winter") ? "winter" : "normal"
   );
+
   useEffect(() => {
     if (showLocations) {
       setMapStyle(`${mapBase}-locations`);
@@ -1216,7 +1283,6 @@ const SettingsModal = ({
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Map Theme - Toggle Switch */}
           <div>
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-gray-400">
@@ -1242,7 +1308,6 @@ const SettingsModal = ({
             </p>
           </div>
 
-          {/* Locations - Toggle Switch */}
           <div>
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-gray-400">
@@ -1266,7 +1331,6 @@ const SettingsModal = ({
             </p>
           </div>
 
-          {/* Player Names - Toggle Switch */}
           <div>
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-gray-400">

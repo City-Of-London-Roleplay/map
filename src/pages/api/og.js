@@ -15,7 +15,7 @@ export default async function handler(req) {
 
     const MAP_SIZE = 3121;
     const PIN_SIZE = 15;
-    const CROP_SIZE = 500; // 500px square crop
+    const CROP_SIZE = 250; // 500px square crop
 
     const cropX = Math.max(
       0,
