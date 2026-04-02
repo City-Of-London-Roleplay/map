@@ -13,11 +13,6 @@ const MAP_STYLES = {
   "winter-locations": "https://map.col-erlc.ca/winter-locations.png"
 };
 
-const STYLE_ICONS = {
-  normal: "🗺️",
-  winter: "❄️"
-};
-
 const AOP_ZONES = [
   {
     id: "1",
@@ -366,6 +361,7 @@ export default function Home() {
     dragStart.current = { x: e.clientX, y: e.clientY };
     dragOffset.current = { x: transform.x, y: transform.y };
   };
+
   const handleMouseMove = (e) => {
     if (!isDragging.current) return;
     e.preventDefault();
@@ -375,6 +371,7 @@ export default function Home() {
       y: dragOffset.current.y + e.clientY - dragStart.current.y
     }));
   };
+
   const handleMouseUp = () => {
     isDragging.current = false;
   };
@@ -399,6 +396,7 @@ export default function Home() {
     dragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     dragOffset.current = { x: transform.x, y: transform.y };
   };
+
   const handleTouchMove = (e) => {
     if (!isDragging.current || e.touches.length !== 1) return;
     e.preventDefault();
@@ -408,6 +406,7 @@ export default function Home() {
       y: dragOffset.current.y + e.touches[0].clientY - dragStart.current.y
     }));
   };
+
   const handleTouchEnd = () => {
     isDragging.current = false;
   };
@@ -1898,9 +1897,7 @@ export default function Home() {
             </button>
           </div>
         </div>
-        {/* /map area */}
       </div>
-
       <style>{`
         .desktop-sidebar { display: none !important; }
         .desktop-top-controls { display: none !important; }
