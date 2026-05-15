@@ -2,7 +2,7 @@
 export default async function handler(req, res) {
   try {
     const response = await fetch(
-      "https://api.policeroleplay.community/v2/server?Players=true&Staff=true&JoinLogs=true&Queue=true&KillLogs=true&CommandLogs=true&ModCalls=true&Vehicles=true",
+      "https://api.erlc.gg/v2/server?Players=true&Staff=true&JoinLogs=true&Queue=true&KillLogs=true&CommandLogs=true&ModCalls=true&Vehicles=true",
       {
         headers: { "Server-Key": process.env.ERLC_API_KEY }
       }

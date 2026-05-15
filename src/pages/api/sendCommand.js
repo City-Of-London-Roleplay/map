@@ -2,7 +2,7 @@
 export default async function handler(req, res) {
   try {
     const response = await fetch(
-      "https://api.policeroleplay.community/v1/server/command",
+      "https://api.erlc.gg/v1/server/command",
 
       {
         method: "POST",
